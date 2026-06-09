@@ -41,6 +41,8 @@ import json
 
 import numpy as np
 import pandas as pd
+import cv2
+import h5py
 
 from mmcv.transforms import BaseTransform
 from mmseg.registry import DATASETS, TRANSFORMS
@@ -214,57 +216,24 @@ class LoadPASTISRaster(BaseTransform):
     Args:
         img_size (int): output H = W after resize.  Default 512.
     """
-
     def __init__(self, img_size: int = 512):
         self.img_size = img_size
-
-    # def transform(self, results: dict) -> dict:
-    #     import cv2
-
-    #     s2 = np.load(results["s2_path"]).astype(np.float32)   # (T, 10, H, W)
-    #     ori_h, ori_w = s2.shape[-2], s2.shape[-1]
-
-    #     # Temporal mean → select RGB bands → HWC
-    #     img = s2.mean(axis=0)[_RGB_IDX].transpose(1, 2, 0).copy()  # (H, W, 3)
-
-    #     # TARGET has shape (3, H, W): channel 0 = semantic labels (0-19)
-    #     ann = np.load(results["ann_path"])[0].astype(np.uint8)  # (H, W), values 0-19
-
-    #     # Resize image and annotation if needed
-    #     if self.img_size != ori_h or self.img_size != ori_w:
-    #         img = cv2.resize(img, (self.img_size, self.img_size),
-    #                          interpolation=cv2.INTER_LINEAR)
-    #         ann = cv2.resize(ann, (self.img_size, self.img_size),
-    #                          interpolation=cv2.INTER_NEAREST)
-
-    #     # Remap: shift crops 1-18 → 0-17; background (0) and void (≥19) → 255
-    #     gt_seg_map = ann.astype(np.int64) - 1        # 0-17 for crops, -1 for bg, 18 for label=19
-    #     gt_seg_map[gt_seg_map < 0] = 255             # background → ignore
-    #     gt_seg_map[gt_seg_map > 17] = 255            # void/out-of-range → ignore
-
-    #     H = W = self.img_size
-    #     results["img"]        = img
-    #     results["gt_seg_map"] = gt_seg_map
-    #     results["img_shape"]  = (H, W)
-    #     results["ori_shape"]  = (H, W)   # both GT and pred live at img_size; avoid postprocess downscale
-    #     results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
-    #     return results
+        # 【修改点 1】初始化一个空的句柄占位符
+        self.worker_h5_file = None 
 
     def transform(self, results: dict) -> dict:
-        import cv2
-        import h5py
 
-        # 【重点修复多进程卡死】在 worker 内部懒加载打开 HDF5，防止多进程冲突
-        if not hasattr(self, 'h5f'):
-            self.h5f = h5py.File(results["h5_path"], 'r',swmr=True)
+        # 【修改点 2】懒加载：每个 Worker 进程独享一个一直保持开启的句柄
+        if self.worker_h5_file is None:
+            self.worker_h5_file = h5py.File(results["h5_path"], 'r', swmr=True)
             
         pid = results["pid"]
         
-        # 直接从 HDF5 中以极速切片读取数据，替代 np.load()
-        s2 = self.h5f['DATA_S2'][pid][:]
-        ann_raw = self.h5f['ANNOTATIONS'][pid][:]
+        # 【修改点 3】直接从复用的句柄中抽取数据，无需再打开/关闭
+        s2 = self.worker_h5_file['DATA_S2'][pid][:]
+        ann_raw = self.worker_h5_file['ANNOTATIONS'][pid][:]
         
-        # ----------- 以下原封不动 -----------
+        # ----------- 以下处理逻辑原封不动 -----------
         s2 = s2.astype(np.float32)
         ori_h, ori_w = s2.shape[-2], s2.shape[-1]
         img = s2.mean(axis=0)[_RGB_IDX].transpose(1, 2, 0).copy()
