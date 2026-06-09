@@ -121,5 +121,5 @@ test_cfg  = dict(type='TestLoop')
 default_hooks = dict(
     checkpoint=dict(type='CheckpointHook', by_epoch=False,
                     interval=2000, save_best='mIoU'),
-    logger=dict(type='LoggerHook', interval=50, log_metric_by_epoch=False),
+    logger=dict(type='LoggerHook', interval=100, log_metric_by_epoch=False),
 )

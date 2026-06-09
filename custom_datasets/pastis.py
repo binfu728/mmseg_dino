@@ -43,6 +43,14 @@ import numpy as np
 import pandas as pd
 import cv2
 import h5py
+import os
+
+cv2.setNumThreads(0)
+cv2.ocl.setUseOpenCL(False)
+
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["HDF5_USE_FILE_LOCKING"]="FALSE"
 
 from mmcv.transforms import BaseTransform
 from mmseg.registry import DATASETS, TRANSFORMS
