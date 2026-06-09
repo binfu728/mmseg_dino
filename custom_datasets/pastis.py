@@ -44,7 +44,7 @@ import pandas as pd
 
 from mmcv.transforms import BaseTransform
 from mmseg.registry import DATASETS, TRANSFORMS
-from .basesegdataset import BaseSegDataset
+from mmseg.datasets import BaseSegDataset
 
 # RGB band indices within the 10-band S2 stack
 # Band order in .npy:  B02, B03, B04, B05, B06, B07, B08, B08A, B11, B12
@@ -218,35 +218,70 @@ class LoadPASTISRaster(BaseTransform):
     def __init__(self, img_size: int = 512):
         self.img_size = img_size
 
+    # def transform(self, results: dict) -> dict:
+    #     import cv2
+
+    #     s2 = np.load(results["s2_path"]).astype(np.float32)   # (T, 10, H, W)
+    #     ori_h, ori_w = s2.shape[-2], s2.shape[-1]
+
+    #     # Temporal mean → select RGB bands → HWC
+    #     img = s2.mean(axis=0)[_RGB_IDX].transpose(1, 2, 0).copy()  # (H, W, 3)
+
+    #     # TARGET has shape (3, H, W): channel 0 = semantic labels (0-19)
+    #     ann = np.load(results["ann_path"])[0].astype(np.uint8)  # (H, W), values 0-19
+
+    #     # Resize image and annotation if needed
+    #     if self.img_size != ori_h or self.img_size != ori_w:
+    #         img = cv2.resize(img, (self.img_size, self.img_size),
+    #                          interpolation=cv2.INTER_LINEAR)
+    #         ann = cv2.resize(ann, (self.img_size, self.img_size),
+    #                          interpolation=cv2.INTER_NEAREST)
+
+    #     # Remap: shift crops 1-18 → 0-17; background (0) and void (≥19) → 255
+    #     gt_seg_map = ann.astype(np.int64) - 1        # 0-17 for crops, -1 for bg, 18 for label=19
+    #     gt_seg_map[gt_seg_map < 0] = 255             # background → ignore
+    #     gt_seg_map[gt_seg_map > 17] = 255            # void/out-of-range → ignore
+
+    #     H = W = self.img_size
+    #     results["img"]        = img
+    #     results["gt_seg_map"] = gt_seg_map
+    #     results["img_shape"]  = (H, W)
+    #     results["ori_shape"]  = (H, W)   # both GT and pred live at img_size; avoid postprocess downscale
+    #     results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
+    #     return results
+
     def transform(self, results: dict) -> dict:
         import cv2
+        import h5py
 
-        s2 = np.load(results["s2_path"]).astype(np.float32)   # (T, 10, H, W)
+        # 【重点修复多进程卡死】在 worker 内部懒加载打开 HDF5，防止多进程冲突
+        if not hasattr(self, 'h5f'):
+            self.h5f = h5py.File(results["h5_path"], 'r')
+            
+        pid = results["pid"]
+        
+        # 直接从 HDF5 中以极速切片读取数据，替代 np.load()
+        s2 = self.h5f['DATA_S2'][pid][:]
+        ann_raw = self.h5f['ANNOTATIONS'][pid][:]
+        
+        # ----------- 以下原封不动 -----------
+        s2 = s2.astype(np.float32)
         ori_h, ori_w = s2.shape[-2], s2.shape[-1]
+        img = s2.mean(axis=0)[_RGB_IDX].transpose(1, 2, 0).copy()
+        ann = ann_raw[0].astype(np.uint8)
 
-        # Temporal mean → select RGB bands → HWC
-        img = s2.mean(axis=0)[_RGB_IDX].transpose(1, 2, 0).copy()  # (H, W, 3)
-
-        # TARGET has shape (3, H, W): channel 0 = semantic labels (0-19)
-        ann = np.load(results["ann_path"])[0].astype(np.uint8)  # (H, W), values 0-19
-
-        # Resize image and annotation if needed
         if self.img_size != ori_h or self.img_size != ori_w:
-            img = cv2.resize(img, (self.img_size, self.img_size),
-                             interpolation=cv2.INTER_LINEAR)
-            ann = cv2.resize(ann, (self.img_size, self.img_size),
-                             interpolation=cv2.INTER_NEAREST)
+            img = cv2.resize(img, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
+            ann = cv2.resize(ann, (self.img_size, self.img_size), interpolation=cv2.INTER_NEAREST)
 
-        # Remap: shift crops 1-18 → 0-17; background (0) and void (≥19) → 255
-        gt_seg_map = ann.astype(np.int64) - 1        # 0-17 for crops, -1 for bg, 18 for label=19
-        gt_seg_map[gt_seg_map < 0] = 255             # background → ignore
-        gt_seg_map[gt_seg_map > 17] = 255            # void/out-of-range → ignore
+        gt_seg_map = ann.astype(np.int64) - 1
+        gt_seg_map[gt_seg_map < 0] = 255
+        gt_seg_map[gt_seg_map > 17] = 255
 
-        H = W = self.img_size
-        results["img"]        = img
+        results["img"] = img
         results["gt_seg_map"] = gt_seg_map
-        results["img_shape"]  = (H, W)
-        results["ori_shape"]  = (H, W)   # both GT and pred live at img_size; avoid postprocess downscale
+        results["img_shape"] = (self.img_size, self.img_size)
+        results["ori_shape"] = (self.img_size, self.img_size)
         results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
         return results
 
@@ -291,29 +326,50 @@ class PASTISRasterDataset(BaseSegDataset):
         self.data_list = self._build_data_list()
         self._fully_initialized = True
 
+    # def _build_data_list(self):
+    #     # PASTIS-R uses metadata.geojson (GeoJSON FeatureCollection).
+    #     # Each feature's properties contain: ID_PATCH (int), Fold (1-5), ...
+    #     with open(self._pastis_root / "metadata.geojson") as f:
+    #         geojson = json.load(f)
+
+    #     folds = _SPLIT_FOLDS[self._split]
+    #     s2_dir  = self._pastis_root / "DATA_S2"
+    #     ann_dir = self._pastis_root / "ANNOTATIONS"
+
+    #     samples = []
+    #     for feat in geojson["features"]:
+    #         props = feat["properties"]
+    #         if props["Fold"] not in folds:
+    #             continue
+    #         pid = int(props["ID_PATCH"])
+    #         s2_path  = s2_dir  / f"S2_{pid}.npy"
+    #         ann_path = ann_dir / f"TARGET_{pid}.npy"
+    #         if s2_path.exists() and ann_path.exists():
+    #             samples.append({
+    #                 "s2_path":  str(s2_path),
+    #                 "ann_path": str(ann_path),
+    #             })
+    #     return samples
+
     def _build_data_list(self):
-        # PASTIS-R uses metadata.geojson (GeoJSON FeatureCollection).
-        # Each feature's properties contain: ID_PATCH (int), Fold (1-5), ...
         with open(self._pastis_root / "metadata.geojson") as f:
             geojson = json.load(f)
-
         folds = _SPLIT_FOLDS[self._split]
-        s2_dir  = self._pastis_root / "DATA_S2"
-        ann_dir = self._pastis_root / "ANNOTATIONS"
-
+        
+        # 【新增】告诉数据集 HDF5 文件在哪
+        h5_path = str(self._pastis_root.parent / "pastis_raster.h5") 
+        
         samples = []
         for feat in geojson["features"]:
             props = feat["properties"]
             if props["Fold"] not in folds:
                 continue
-            pid = int(props["ID_PATCH"])
-            s2_path  = s2_dir  / f"S2_{pid}.npy"
-            ann_path = ann_dir / f"TARGET_{pid}.npy"
-            if s2_path.exists() and ann_path.exists():
-                samples.append({
-                    "s2_path":  str(s2_path),
-                    "ann_path": str(ann_path),
-                })
+            pid = str(props["ID_PATCH"])
+            # 仅仅保存 ID 和 HDF5 的位置
+            samples.append({
+                "pid": pid,
+                "h5_path": h5_path
+            })
         return samples
 
     def load_data_list(self):

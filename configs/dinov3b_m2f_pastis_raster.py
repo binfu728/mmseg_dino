@@ -1,10 +1,15 @@
+custom_imports = dict(
+    imports = ['custom_models.dinov3_backbone','custom_datasets.pastis'],
+    allow_failed_imports = False
+)
+
 _base_ = [
-    '../mask2former/mask2former_r50_8xb2-160k_ade20k-512x512.py',
+    '/mnt/ht2_nas2/00-model/00-fb/MMcodes/mmsegmentation/configs/mask2former/mask2former_r50_8xb2-160k_ade20k-512x512.py',
 ]
 
 # ── Paths to set manually ─────────────────────────────────────────────────────
-DINO_CKPT   = '/home/zifei/.cache/modelscope/hub/models/facebook/dinov3pth/dinov3_vits16_pretrain_lvd1689m-08c60483.pth'
-PASTIS_ROOT = '/home/zifei/dataset/PASTIS-R'   # dir with metadata.geojson, DATA_S2/, ANNOTATIONS/
+DINO_CKPT   = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth'
+PASTIS_ROOT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R'   # dir with metadata.geojson, DATA_S2/, ANNOTATIONS/
 # ─────────────────────────────────────────────────────────────────────────────
 
 num_classes = 18    # crop classes 0-17; background (orig 0) → ignore_index=255
