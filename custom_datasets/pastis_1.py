@@ -162,61 +162,20 @@ class PASTISDataset(BaseSegDataset):
         self.data_list = self._build_data_list()
         self._fully_initialized = True
 
-    # def _build_data_list(self):
-    #     meta = pd.read_csv(self._pastis_root / "metadata_parcel.csv")
-    #     folds = _SPLIT_FOLDS[self._split]
-    #     meta = meta[meta["Fold"].isin(folds)].copy()
-    #     s2_dir = self._pastis_root / "DATA_S2"
-    #     samples = []
-    #     for _, row in meta.iterrows():
-    #         pid = int(row["ID_PARCEL"])
-    #         s2_path = s2_dir / f"S2_{pid}.npy"
-    #         if s2_path.exists():
-    #             samples.append({
-    #                 "s2_path": str(s2_path),
-    #                 "label": int(row["Label"]),
-    #             })
-    #     return samples
-
     def _build_data_list(self):
-        # ================== 修改部分开始 ==================
-        # 增加缓存机制：把有效文件路径存为 json 索引，避免在 NAS 上反复遍历
-        cache_file = self._pastis_root / f"cache_{self._split}_list.json"
-        if cache_file.exists():
-            # 第二次运行直接秒开读取
-            with open(cache_file, 'r') as f:
-                return json.load(f)
-
-        # 第一次运行：解析 geojson
-        with open(self._pastis_root / "metadata.geojson") as f:
-            geojson = json.load(f)
-
+        meta = pd.read_csv(self._pastis_root / "metadata_parcel.csv")
         folds = _SPLIT_FOLDS[self._split]
-        
-        # 【重点】指向我们刚才预处理生成的新文件夹
-        s2_dir  = self._pastis_root / "DATA_S2_RGB_MEAN"  
-        ann_dir = self._pastis_root / "ANNOTATIONS"
-
+        meta = meta[meta["Fold"].isin(folds)].copy()
+        s2_dir = self._pastis_root / "DATA_S2"
         samples = []
-        for feat in geojson["features"]:
-            props = feat["properties"]
-            if props["Fold"] not in folds:
-                continue
-            pid = int(props["ID_PATCH"])
-            s2_path  = s2_dir  / f"S2_{pid}.npy"
-            ann_path = ann_dir / f"TARGET_{pid}.npy"
-            
-            # NAS上的 exists() 很慢，所以我们把成功的结果缓存下来
-            if s2_path.exists() and ann_path.exists():
+        for _, row in meta.iterrows():
+            pid = int(row["ID_PARCEL"])
+            s2_path = s2_dir / f"S2_{pid}.npy"
+            if s2_path.exists():
                 samples.append({
-                    "s2_path":  str(s2_path),
-                    "ann_path": str(ann_path),
+                    "s2_path": str(s2_path),
+                    "label": int(row["Label"]),
                 })
-                
-        # 写入缓存文件
-        with open(cache_file, 'w') as f:
-            json.dump(samples, f)
-            
         return samples
 
     # BaseSegDataset interface
@@ -257,70 +216,41 @@ class LoadPASTISRaster(BaseTransform):
     Args:
         img_size (int): output H = W after resize.  Default 512.
     """
-
     def __init__(self, img_size: int = 512):
         self.img_size = img_size
+        # 【修改点 1】初始化一个空的句柄占位符
+        self.worker_h5_file = None 
 
-    # def transform(self, results: dict) -> dict:
-    #     import cv2
-
-    #     s2 = np.load(results["s2_path"]).astype(np.float32)   # (T, 10, H, W)
-    #     ori_h, ori_w = s2.shape[-2], s2.shape[-1]
-
-    #     # Temporal mean → select RGB bands → HWC
-    #     img = s2.mean(axis=0)[_RGB_IDX].transpose(1, 2, 0).copy()  # (H, W, 3)
-
-    #     # TARGET has shape (3, H, W): channel 0 = semantic labels (0-19)
-    #     ann = np.load(results["ann_path"])[0].astype(np.uint8)  # (H, W), values 0-19
-
-    #     # Resize image and annotation if needed
-    #     if self.img_size != ori_h or self.img_size != ori_w:
-    #         img = cv2.resize(img, (self.img_size, self.img_size),
-    #                          interpolation=cv2.INTER_LINEAR)
-    #         ann = cv2.resize(ann, (self.img_size, self.img_size),
-    #                          interpolation=cv2.INTER_NEAREST)
-
-    #     # Remap: shift crops 1-18 → 0-17; background (0) and void (≥19) → 255
-    #     gt_seg_map = ann.astype(np.int64) - 1        # 0-17 for crops, -1 for bg, 18 for label=19
-    #     gt_seg_map[gt_seg_map < 0] = 255             # background → ignore
-    #     gt_seg_map[gt_seg_map > 17] = 255            # void/out-of-range → ignore
-
-    #     H = W = self.img_size
-    #     results["img"]        = img
-    #     results["gt_seg_map"] = gt_seg_map
-    #     results["img_shape"]  = (H, W)
-    #     results["ori_shape"]  = (H, W)   # both GT and pred live at img_size; avoid postprocess downscale
-    #     results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
-    #     return results
     def transform(self, results: dict) -> dict:
-        import cv2
 
-        # ================== 修改部分开始 ==================
-        # 直接读取预处理后的 (H, W, 3) 轻量级数据
-        img = np.load(results["s2_path"]).astype(np.float32) 
-        ori_h, ori_w = img.shape[0], img.shape[1]
-        # ================== 修改部分结束 ==================
+        # 【修改点 2】懒加载：每个 Worker 进程独享一个一直保持开启的句柄
+        if self.worker_h5_file is None:
+            self.worker_h5_file = h5py.File(results["h5_path"], 'r', swmr=True)
+            
+        pid = results["pid"]
+        
+        # 【修改点 3】直接从复用的句柄中抽取数据，无需再打开/关闭
+        s2 = self.worker_h5_file['DATA_S2'][pid][:]
+        ann_raw = self.worker_h5_file['ANNOTATIONS'][pid][:]
+        
+        # ----------- 以下处理逻辑原封不动 -----------
+        s2 = s2.astype(np.float32)
+        ori_h, ori_w = s2.shape[-2], s2.shape[-1]
+        img = s2.mean(axis=0)[_RGB_IDX].transpose(1, 2, 0).copy()
+        ann = ann_raw[0].astype(np.uint8)
 
-        # TARGET has shape (3, H, W): channel 0 = semantic labels (0-19)
-        ann = np.load(results["ann_path"])[0].astype(np.uint8)  # (H, W), values 0-19
-
-        # Resize image and annotation if needed
         if self.img_size != ori_h or self.img_size != ori_w:
-            img = cv2.resize(img, (self.img_size, self.img_size),
-                             interpolation=cv2.INTER_LINEAR)
-            ann = cv2.resize(ann, (self.img_size, self.img_size),
-                             interpolation=cv2.INTER_NEAREST)
+            img = cv2.resize(img, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
+            ann = cv2.resize(ann, (self.img_size, self.img_size), interpolation=cv2.INTER_NEAREST)
 
-        # Remap: shift crops 1-18 → 0-17; background (0) and void (≥19) → 255
-        gt_seg_map = ann.astype(np.int64) - 1        
-        gt_seg_map[gt_seg_map < 0] = 255             
-        gt_seg_map[gt_seg_map > 17] = 255            
+        gt_seg_map = ann.astype(np.int64) - 1
+        gt_seg_map[gt_seg_map < 0] = 255
+        gt_seg_map[gt_seg_map > 17] = 255
 
-        H = W = self.img_size
-        results["img"]        = img
+        results["img"] = img
         results["gt_seg_map"] = gt_seg_map
-        results["img_shape"]  = (H, W)
-        results["ori_shape"]  = (H, W)   
+        results["img_shape"] = (self.img_size, self.img_size)
+        results["ori_shape"] = (self.img_size, self.img_size)
         results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
         return results
 
@@ -365,29 +295,50 @@ class PASTISRasterDataset(BaseSegDataset):
         self.data_list = self._build_data_list()
         self._fully_initialized = True
 
+    # def _build_data_list(self):
+    #     # PASTIS-R uses metadata.geojson (GeoJSON FeatureCollection).
+    #     # Each feature's properties contain: ID_PATCH (int), Fold (1-5), ...
+    #     with open(self._pastis_root / "metadata.geojson") as f:
+    #         geojson = json.load(f)
+
+    #     folds = _SPLIT_FOLDS[self._split]
+    #     s2_dir  = self._pastis_root / "DATA_S2"
+    #     ann_dir = self._pastis_root / "ANNOTATIONS"
+
+    #     samples = []
+    #     for feat in geojson["features"]:
+    #         props = feat["properties"]
+    #         if props["Fold"] not in folds:
+    #             continue
+    #         pid = int(props["ID_PATCH"])
+    #         s2_path  = s2_dir  / f"S2_{pid}.npy"
+    #         ann_path = ann_dir / f"TARGET_{pid}.npy"
+    #         if s2_path.exists() and ann_path.exists():
+    #             samples.append({
+    #                 "s2_path":  str(s2_path),
+    #                 "ann_path": str(ann_path),
+    #             })
+    #     return samples
+
     def _build_data_list(self):
-        # PASTIS-R uses metadata.geojson (GeoJSON FeatureCollection).
-        # Each feature's properties contain: ID_PATCH (int), Fold (1-5), ...
         with open(self._pastis_root / "metadata.geojson") as f:
             geojson = json.load(f)
-
         folds = _SPLIT_FOLDS[self._split]
-        s2_dir  = self._pastis_root / "DATA_S2"
-        ann_dir = self._pastis_root / "ANNOTATIONS"
-
+        
+        # 【新增】告诉数据集 HDF5 文件在哪
+        h5_path = str(self._pastis_root.parent / "pastis_raster.h5") 
+        
         samples = []
         for feat in geojson["features"]:
             props = feat["properties"]
             if props["Fold"] not in folds:
                 continue
-            pid = int(props["ID_PATCH"])
-            s2_path  = s2_dir  / f"S2_{pid}.npy"
-            ann_path = ann_dir / f"TARGET_{pid}.npy"
-            if s2_path.exists() and ann_path.exists():
-                samples.append({
-                    "s2_path":  str(s2_path),
-                    "ann_path": str(ann_path),
-                })
+            pid = str(props["ID_PATCH"])
+            # 仅仅保存 ID 和 HDF5 的位置
+            samples.append({
+                "pid": pid,
+                "h5_path": h5_path
+            })
         return samples
 
     def load_data_list(self):
