@@ -90,36 +90,34 @@ class LoadPASTISPixelSet(BaseTransform):
         self.n_pixel = grid_size * grid_size
 
     def transform(self, results: dict) -> dict:
-        s2 = np.load(results["s2_path"]).astype(np.float32)  # (T, C=10, N)
+        import cv2
 
-        # Temporal mean
-        img = s2.mean(axis=0)  # (C=10, N)
-        N = img.shape[-1]
-        n = self.n_pixel
+        # ================== 修改部分开始 ==================
+        # 直接读取预处理后的 (H, W, 3) 轻量级数据
+        img = np.load(results["s2_path"]).astype(np.float32) 
+        ori_h, ori_w = img.shape[0], img.shape[1]
+        # ================== 修改部分结束 ==================
 
-        # Sample n pixels; repeat smaller parcels to fill the grid
-        if N >= n:
-            idx = np.random.choice(N, n, replace=False)
-        else:
-            idx = np.concatenate([
-                np.arange(N),
-                np.random.choice(N, n - N, replace=True),
-            ])
-            np.random.shuffle(idx)
+        # TARGET has shape (3, H, W): channel 0 = semantic labels (0-19)
+        ann = np.load(results["ann_path"])[0].astype(np.uint8)  # (H, W), values 0-19
 
-        img = img[_RGB_IDX][:, idx]  # (3, n)  →  R, G, B
+        # Resize image and annotation if needed
+        if self.img_size != ori_h or self.img_size != ori_w:
+            img = cv2.resize(img, (self.img_size, self.img_size),
+                             interpolation=cv2.INTER_LINEAR)
+            ann = cv2.resize(ann, (self.img_size, self.img_size),
+                             interpolation=cv2.INTER_NEAREST)
 
-        H = W = self.grid_size
-        img = img.reshape(3, H, W).transpose(1, 2, 0).copy()  # (H, W, 3)
+        # Remap: shift crops 1-18 → 0-17; background (0) and void (≥19) → 255
+        gt_seg_map = ann.astype(np.int64) - 1        
+        gt_seg_map[gt_seg_map < 0] = 255             
+        gt_seg_map[gt_seg_map > 17] = 255            
 
-        # Parcel label: shift 1-18 → 0-17
-        label = int(results["label"]) - 1
-        gt_seg_map = np.full((H, W), label, dtype=np.int64)
-
-        results["img"] = img
+        H = W = self.img_size
+        results["img"]        = img
         results["gt_seg_map"] = gt_seg_map
-        results["img_shape"] = (H, W)
-        results["ori_shape"] = (H, W)
+        results["img_shape"]  = (H, W)
+        results["ori_shape"]  = (H, W)   
         results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
         return results
 
