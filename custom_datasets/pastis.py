@@ -41,6 +41,8 @@ import json
 
 import numpy as np
 import pandas as pd
+import cv2
+import h5py
 
 from mmcv.transforms import BaseTransform
 from mmseg.registry import DATASETS, TRANSFORMS
