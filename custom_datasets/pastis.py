@@ -256,7 +256,7 @@ class LoadPASTISRaster(BaseTransform):
 
         # 【重点修复多进程卡死】在 worker 内部懒加载打开 HDF5，防止多进程冲突
         if not hasattr(self, 'h5f'):
-            self.h5f = h5py.File(results["h5_path"], 'r')
+            self.h5f = h5py.File(results["h5_path"], 'r',swmr=True)
             
         pid = results["pid"]
         
