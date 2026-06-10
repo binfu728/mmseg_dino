@@ -8,7 +8,7 @@ from mmengine.config import Config, DictAction
 from mmengine.logging import print_log
 from mmengine.runner import Runner
 
-from mmseg.registry import RUNNERS
+from mmseg.registry import RUNNERS # type: ignore
 
 
 def parse_args():

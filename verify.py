@@ -1,8 +1,8 @@
 import torch
-import mmcv
-import mmdet
-import mmseg
-from mmcv.ops import MultiScaleDeformableAttention
+import mmcv # type: ignore
+import mmdet # type: ignore
+import mmseg # type: ignore
+from mmcv.ops import MultiScaleDeformableAttention # type: ignore
 
 print("="*50)
 print(f"🔥 PyTorch 版本: {torch.__version__}, CUDA 是否可用: {torch.cuda.is_available()}")

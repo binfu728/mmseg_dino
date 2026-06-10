@@ -35,7 +35,7 @@ model = dict(
         arch='vit_small',          # vit_small: embed_dim=384; vit_large: 1024
         patch_size=16,
         checkpoint=DINO_CKPT,
-        freeze_backbone=True,      # True=linear probe; False=full finetune
+        freeze_backbone=False,      # True=linear probe; False=full finetune
     ),
     decode_head=dict(
         in_channels=[384, 384, 384, 384],   # ViT-S embed_dim, same across 4 scales

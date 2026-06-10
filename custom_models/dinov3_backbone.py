@@ -10,7 +10,7 @@ from mmcv.cnn.bricks.transformer import MultiScaleDeformableAttention # type: ig
 
 from mmseg.registry import MODELS # type: ignore
 
-_DINO_ROOT = str(Path(__file__).resolve().parents / "dinov3")
+_DINO_ROOT = str(Path(__file__).parent / "dinov3")
 if _DINO_ROOT not in sys.path:
     sys.path.insert(0, _DINO_ROOT)
 
