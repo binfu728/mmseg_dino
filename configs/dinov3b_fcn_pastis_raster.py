@@ -30,6 +30,7 @@ data_preprocessor = dict(
 # ── 3. 覆盖模型结构 (只写需要修改和替换的部分) ───────────────────────────────
 model = dict(
     data_preprocessor=data_preprocessor,
+    pretrained=None,
     backbone=dict(
         _delete_=True,             # 关键：删掉 _base_ 里的 ResNet50
         type='DINOv3BackboneMmseg',
@@ -44,8 +45,7 @@ model = dict(
         loss_decode=dict(
             type='CrossEntropyLoss',
             use_sigmoid=False,
-            loss_weight=1.0,
-            class_weight=[1.0] * num_classes + [0.1],  # PASTIS 类别权重
+            loss_weight=1.0
         ),
     ),
     auxiliary_head=dict(
@@ -54,8 +54,7 @@ model = dict(
         loss_decode=dict(
             type='CrossEntropyLoss',
             use_sigmoid=False,
-            loss_weight=0.4,       # 辅助头 loss 权重按官方保持 0.4
-            class_weight=[1.0] * num_classes + [0.1],
+            loss_weight=0.4       # 辅助头 loss 权重按官方保持 0.4
         ),
     ),
 )
