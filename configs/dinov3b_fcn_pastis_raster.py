@@ -36,7 +36,7 @@ model = dict(
         arch='vit_small',          # vit_small: embed_dim=384
         patch_size=16,
         checkpoint=DINO_CKPT,
-        freeze_backbone=True,      # True=linear probe; False=full finetune
+        freeze_backbone=False,      # True=linear probe; False=full finetune
     ),
     decode_head=dict(
         in_channels=384,           # 覆盖 _base_ 里的 2048，适配 DINOv3-S
