@@ -3435,3 +3435,37 @@ The value is the same before and after calling `init_weights` of EncoderDecoder
 2026/06/10 18:44:08 - mmengine - INFO - Iter(train) [29500/40000]  base_lr: 3.0007e-05 lr: 3.0007e-06  eta: 0:33:13  time: 0.1879  data_time: 0.0088  memory: 1530  grad_norm: 4.6973  loss: 0.7245  decode.loss_ce: 0.4505  decode.acc_seg: 73.4535  aux.loss_ce: 0.2740  aux.acc_seg: 46.4029
 2026/06/10 18:44:27 - mmengine - INFO - Iter(train) [29600/40000]  base_lr: 2.9750e-05 lr: 2.9750e-06  eta: 0:32:53  time: 0.1880  data_time: 0.0089  memory: 1529  grad_norm: 6.8410  loss: 0.6754  decode.loss_ce: 0.4169  decode.acc_seg: 72.4476  aux.loss_ce: 0.2584  aux.acc_seg: 59.4268
 2026/06/10 18:44:46 - mmengine - INFO - Iter(train) [29700/40000]  base_lr: 2.9492e-05 lr: 2.9492e-06  eta: 0:32:34  time: 0.1933  data_time: 0.0099  memory: 1529  grad_norm: 5.0505  loss: 0.6823  decode.loss_ce: 0.4137  decode.acc_seg: 62.2391  aux.loss_ce: 0.2687  aux.acc_seg: 52.9700
+2026/06/10 18:45:05 - mmengine - INFO - Iter(train) [29800/40000]  base_lr: 2.9235e-05 lr: 2.9235e-06  eta: 0:32:16  time: 0.1904  data_time: 0.0097  memory: 1530  grad_norm: 5.1423  loss: 0.6143  decode.loss_ce: 0.3645  decode.acc_seg: 75.6215  aux.loss_ce: 0.2497  aux.acc_seg: 56.2084
+2026/06/10 18:45:24 - mmengine - INFO - Iter(train) [29900/40000]  base_lr: 2.8976e-05 lr: 2.8976e-06  eta: 0:31:57  time: 0.1895  data_time: 0.0094  memory: 1529  grad_norm: 5.1831  loss: 0.6409  decode.loss_ce: 0.3736  decode.acc_seg: 75.5688  aux.loss_ce: 0.2673  aux.acc_seg: 64.1573
+2026/06/10 18:45:43 - mmengine - INFO - Exp name: dinov3b_fcn_pastis_raster_20260610_170813
+2026/06/10 18:45:43 - mmengine - INFO - Iter(train) [30000/40000]  base_lr: 2.8718e-05 lr: 2.8718e-06  eta: 0:31:38  time: 0.1895  data_time: 0.0093  memory: 1529  grad_norm: 5.9661  loss: 0.7348  decode.loss_ce: 0.4349  decode.acc_seg: 72.0588  aux.loss_ce: 0.2998  aux.acc_seg: 55.0477
+2026/06/10 18:45:43 - mmengine - INFO - Saving checkpoint at 30000 iterations
+2026/06/10 18:45:49 - mmengine - INFO - Iter(val) [100/241]    eta: 0:00:04  time: 0.0333  data_time: 0.0033  memory: 546  
+2026/06/10 18:45:52 - mmengine - INFO - Iter(val) [200/241]    eta: 0:00:01  time: 0.0332  data_time: 0.0032  memory: 546  
+2026/06/10 18:45:54 - mmengine - INFO - per class results:
+2026/06/10 18:45:54 - mmengine - INFO - 
++---------+-------+-------+
+|  Class  |  IoU  |  Acc  |
++---------+-------+-------+
+|  crop_1 | 65.26 | 82.63 |
+|  crop_2 |  31.2 | 47.96 |
+|  crop_3 | 28.82 |  50.1 |
+|  crop_4 |  5.85 |  8.57 |
+|  crop_5 |  16.3 | 26.74 |
+|  crop_6 |  3.34 |  4.72 |
+|  crop_7 |  5.79 |  7.81 |
+|  crop_8 |  34.9 | 53.44 |
+|  crop_9 | 19.64 | 24.28 |
+| crop_10 |  5.88 |  8.25 |
+| crop_11 | 17.63 | 33.43 |
+| crop_12 | 12.34 | 23.15 |
+| crop_13 |  7.61 |  10.4 |
+| crop_14 |  9.39 | 15.05 |
+| crop_15 |  3.92 |  5.9  |
+| crop_16 | 28.02 | 47.24 |
+| crop_17 |  0.82 |  0.97 |
+| crop_18 |  3.8  |  4.92 |
++---------+-------+-------+
+2026/06/10 18:45:54 - mmengine - INFO - Iter(val) [241/241]    aAcc: 53.1700  mIoU: 16.6900  mAcc: 25.3100  data_time: 0.0036  time: 0.0338
+2026/06/10 18:46:13 - mmengine - INFO - Iter(train) [30100/40000]  base_lr: 2.8460e-05 lr: 2.8460e-06  eta: 0:31:19  time: 0.1895  data_time: 0.0096  memory: 1530  grad_norm: 6.1938  loss: 0.7447  decode.loss_ce: 0.4669  decode.acc_seg: 54.8465  aux.loss_ce: 0.2779  aux.acc_seg: 40.3153
+2026/06/10 18:46:32 - mmengine - INFO - Iter(train) [30200/40000]  base_lr: 2.8201e-05 lr: 2.8201e-06  eta: 0:31:00  time: 0.1893  data_time: 0.0095  memory: 1530  grad_norm: 5.9685  loss: 0.7074  decode.loss_ce: 0.4240  decode.acc_seg: 68.9781  aux.loss_ce: 0.2835  aux.acc_seg: 58.3169
