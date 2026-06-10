@@ -44,9 +44,9 @@ import pandas as pd
 import cv2
 import h5py
 
-from mmcv.transforms import BaseTransform
-from mmseg.registry import DATASETS, TRANSFORMS
-from mmseg.datasets import BaseSegDataset
+from mmcv.transforms import BaseTransform # type: ignore
+from mmseg.registry import DATASETS, TRANSFORMS # type: ignore
+from mmseg.datasets import BaseSegDataset # type: ignore
 
 # RGB band indices within the 10-band S2 stack
 # Band order in .npy:  B02, B03, B04, B05, B06, B07, B08, B08A, B11, B12
