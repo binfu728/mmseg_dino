@@ -160,61 +160,20 @@ class PASTISDataset(BaseSegDataset):
         self.data_list = self._build_data_list()
         self._fully_initialized = True
 
-    # def _build_data_list(self):
-    #     meta = pd.read_csv(self._pastis_root / "metadata_parcel.csv")
-    #     folds = _SPLIT_FOLDS[self._split]
-    #     meta = meta[meta["Fold"].isin(folds)].copy()
-    #     s2_dir = self._pastis_root / "DATA_S2"
-    #     samples = []
-    #     for _, row in meta.iterrows():
-    #         pid = int(row["ID_PARCEL"])
-    #         s2_path = s2_dir / f"S2_{pid}.npy"
-    #         if s2_path.exists():
-    #             samples.append({
-    #                 "s2_path": str(s2_path),
-    #                 "label": int(row["Label"]),
-    #             })
-    #     return samples
-
     def _build_data_list(self):
-        # ================== 修改部分开始 ==================
-        # 增加缓存机制：把有效文件路径存为 json 索引，避免在 NAS 上反复遍历
-        cache_file = self._pastis_root / f"cache_{self._split}_list.json"
-        if cache_file.exists():
-            # 第二次运行直接秒开读取
-            with open(cache_file, 'r') as f:
-                return json.load(f)
-
-        # 第一次运行：解析 geojson
-        with open(self._pastis_root / "metadata.geojson") as f:
-            geojson = json.load(f)
-
+        meta = pd.read_csv(self._pastis_root / "metadata_parcel.csv")
         folds = _SPLIT_FOLDS[self._split]
-        
-        # 【重点】指向我们刚才预处理生成的新文件夹
-        s2_dir  = self._pastis_root / "DATA_S2_RGB_MEAN"  
-        ann_dir = self._pastis_root / "ANNOTATIONS"
-
+        meta = meta[meta["Fold"].isin(folds)].copy()
+        s2_dir = self._pastis_root / "DATA_S2"
         samples = []
-        for feat in geojson["features"]:
-            props = feat["properties"]
-            if props["Fold"] not in folds:
-                continue
-            pid = int(props["ID_PATCH"])
-            s2_path  = s2_dir  / f"S2_{pid}.npy"
-            ann_path = ann_dir / f"TARGET_{pid}.npy"
-            
-            # NAS上的 exists() 很慢，所以我们把成功的结果缓存下来
-            if s2_path.exists() and ann_path.exists():
+        for _, row in meta.iterrows():
+            pid = int(row["ID_PARCEL"])
+            s2_path = s2_dir / f"S2_{pid}.npy"
+            if s2_path.exists():
                 samples.append({
-                    "s2_path":  str(s2_path),
-                    "ann_path": str(ann_path),
+                    "s2_path": str(s2_path),
+                    "label": int(row["Label"]),
                 })
-                
-        # 写入缓存文件
-        with open(cache_file, 'w') as f:
-            json.dump(samples, f)
-            
         return samples
 
     # BaseSegDataset interface
@@ -363,14 +322,48 @@ class PASTISRasterDataset(BaseSegDataset):
         self.data_list = self._build_data_list()
         self._fully_initialized = True
 
+    # def _build_data_list(self):
+    #     # PASTIS-R uses metadata.geojson (GeoJSON FeatureCollection).
+    #     # Each feature's properties contain: ID_PATCH (int), Fold (1-5), ...
+    #     with open(self._pastis_root / "metadata.geojson") as f:
+    #         geojson = json.load(f)
+
+    #     folds = _SPLIT_FOLDS[self._split]
+    #     s2_dir  = self._pastis_root / "DATA_S2"
+    #     ann_dir = self._pastis_root / "ANNOTATIONS"
+
+    #     samples = []
+    #     for feat in geojson["features"]:
+    #         props = feat["properties"]
+    #         if props["Fold"] not in folds:
+    #             continue
+    #         pid = int(props["ID_PATCH"])
+    #         s2_path  = s2_dir  / f"S2_{pid}.npy"
+    #         ann_path = ann_dir / f"TARGET_{pid}.npy"
+    #         if s2_path.exists() and ann_path.exists():
+    #             samples.append({
+    #                 "s2_path":  str(s2_path),
+    #                 "ann_path": str(ann_path),
+    #             })
+    #     return samples
+
     def _build_data_list(self):
-        # PASTIS-R uses metadata.geojson (GeoJSON FeatureCollection).
-        # Each feature's properties contain: ID_PATCH (int), Fold (1-5), ...
+        # ================== 修改部分开始 ==================
+        # 增加缓存机制：把有效文件路径存为 json 索引，避免在 NAS 上反复遍历
+        cache_file = self._pastis_root / f"cache_{self._split}_list.json"
+        if cache_file.exists():
+            # 第二次运行直接秒开读取
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+
+        # 第一次运行：解析 geojson
         with open(self._pastis_root / "metadata.geojson") as f:
             geojson = json.load(f)
 
         folds = _SPLIT_FOLDS[self._split]
-        s2_dir  = self._pastis_root / "DATA_S2"
+        
+        # 【重点】指向我们刚才预处理生成的新文件夹
+        s2_dir  = self._pastis_root / "DATA_S2_RGB_MEAN"  
         ann_dir = self._pastis_root / "ANNOTATIONS"
 
         samples = []
@@ -381,11 +374,18 @@ class PASTISRasterDataset(BaseSegDataset):
             pid = int(props["ID_PATCH"])
             s2_path  = s2_dir  / f"S2_{pid}.npy"
             ann_path = ann_dir / f"TARGET_{pid}.npy"
+            
+            # NAS上的 exists() 很慢，所以我们把成功的结果缓存下来
             if s2_path.exists() and ann_path.exists():
                 samples.append({
                     "s2_path":  str(s2_path),
                     "ann_path": str(ann_path),
                 })
+                
+        # 写入缓存文件
+        with open(cache_file, 'w') as f:
+            json.dump(samples, f)
+            
         return samples
 
     def load_data_list(self):
