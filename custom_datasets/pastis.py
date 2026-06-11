@@ -350,7 +350,7 @@ class PASTISRasterDataset(BaseSegDataset):
     def _build_data_list(self):
         # ================== 修改部分开始 ==================
         # 增加缓存机制：把有效文件路径存为 json 索引，避免在 NAS 上反复遍历
-        cache_file = self._pastis_root / f"cache_{self._split}_list.json"
+        cache_file = self._pastis_root / f"cache_{self._split}_ts_list.json"
         if cache_file.exists():
             # 第二次运行直接秒开读取
             with open(cache_file, 'r') as f:
@@ -362,8 +362,8 @@ class PASTISRasterDataset(BaseSegDataset):
 
         folds = _SPLIT_FOLDS[self._split]
         
-        # 【重点】指向我们刚才预处理生成的新文件夹
-        s2_dir  = self._pastis_root / "DATA_S2_RGB_MEAN"  
+        # 【重点】指向 36 通道时序数据文件夹 (OlmoEarth 时间特征池化)
+        s2_dir  = self._pastis_root / "DATA_S2_RGB_TIMESERIES"
         ann_dir = self._pastis_root / "ANNOTATIONS"
 
         samples = []
