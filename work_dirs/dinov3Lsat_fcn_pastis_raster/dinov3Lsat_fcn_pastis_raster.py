@@ -51,7 +51,7 @@ model = dict(
         loss_decode=dict(
             loss_weight=0.4, type='CrossEntropyLoss', use_sigmoid=False),
         norm_cfg=dict(requires_grad=True, type='SyncBN'),
-        num_classes=18,
+        num_classes=19,
         num_convs=1,
         type='FCNHead'),
     backbone=dict(
@@ -91,7 +91,7 @@ model = dict(
         loss_decode=dict(
             loss_weight=1.0, type='CrossEntropyLoss', use_sigmoid=False),
         norm_cfg=dict(requires_grad=True, type='SyncBN'),
-        num_classes=18,
+        num_classes=19,
         num_convs=2,
         type='FCNHead'),
     pretrained=None,
@@ -99,7 +99,7 @@ model = dict(
     train_cfg=dict(),
     type='EncoderDecoder')
 norm_cfg = dict(requires_grad=True, type='SyncBN')
-num_classes = 18
+num_classes = 19
 optim_wrapper = dict(
     clip_grad=dict(max_norm=0.01, norm_type=2),
     optimizer=dict(
@@ -145,7 +145,7 @@ test_evaluator = dict(
     ], type='IoUMetric')
 train_cfg = dict(max_epochs=50, type='EpochBasedTrainLoop', val_interval=1)
 train_dataloader = dict(
-    batch_size=4,
+    batch_size=2,
     dataset=dict(
         data_root='/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R',
         pipeline=[
@@ -195,4 +195,4 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
     ])
-work_dir = './work_dirs/'
+work_dir = './work_dirs/dinov3Lsat_fcn_pastis_raster'

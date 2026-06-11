@@ -10,10 +10,10 @@ _base_ = [
 ]
 
 # ── 2. Paths (请修改为你的 Large 模型权重路径) ─────────────────────────────────
-DINO_LARGE_CKPT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vitl14_pretrain.pth' 
+DINO_LARGE_CKPT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth' 
 PASTIS_ROOT     = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R'
 
-num_classes = 18    # crop classes 0-17
+num_classes = 19    # crop classes 0-17
 img_size    = 512   
 
 data_preprocessor = dict(
@@ -35,7 +35,7 @@ model = dict(
         _delete_=True,              
         type='DINOv3BackboneMmseg',
         arch='vit_large',           
-        patch_size=14,              # 注意：Large 版本通常 patch_size 是 14
+        patch_size=16,              # 注意：Large 版本通常 patch_size 是 14
         checkpoint=DINO_LARGE_CKPT, 
         freeze_backbone=False,      # 忽略前20%冻结，直接从头开始全参微调
     ),
@@ -120,7 +120,7 @@ param_scheduler = [
     dict(
         type='ReduceOnPlateauLR',
         monitor='mIoU',        # 监控验证集的 mIoU
-        rule='max',            # mIoU 越大越好
+        rule='greater',            # mIoU 越大越好
         factor=0.2,            # 降低系数：乘以 0.2
         patience=2,            # 容忍度：2 个 epoch 没有提升就触发下降
         cooldown=10,           # 冷却期：触发下降后的 10 个 epoch 内不再触发
