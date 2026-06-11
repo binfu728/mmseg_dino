@@ -25,7 +25,7 @@ _base_ = [
 DINO_LARGE_CKPT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth'
 PASTIS_ROOT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R'
 
-num_classes = 18
+num_classes = 19
 img_size = 224
 
 # 36 通道 Normalization: 12 个时相 × 3 通道 RGB, 每通道独立归一化
@@ -56,6 +56,7 @@ model = dict(
     ),
     decode_head=dict(
         in_channels=1024,  # ViT-Large embed_dim
+        in_index=0,        # 单输出 backbone 必须显式指定索引
         num_classes=num_classes,
         loss_decode=dict(
             type='CrossEntropyLoss',

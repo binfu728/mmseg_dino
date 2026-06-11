@@ -13,7 +13,7 @@ _base_ = [
 DINO_CKPT   = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth'
 PASTIS_ROOT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R'
 
-num_classes = 18    # crop classes 0-17
+num_classes = 19    # crop classes 0-17
 img_size    = 512   # 128×128 raster patch upsampled to 512×512 for ViT
 
 data_preprocessor = dict(

@@ -217,11 +217,11 @@ model = dict(
         concat_input=True,
         dropout_ratio=0.1,
         in_channels=1024,
-        in_index=3,
+        in_index=0,
         loss_decode=dict(
             loss_weight=1.0, type='CrossEntropyLoss', use_sigmoid=False),
         norm_cfg=dict(requires_grad=True, type='SyncBN'),
-        num_classes=18,
+        num_classes=19,
         num_convs=2,
         type='FCNHead'),
     pretrained=None,
@@ -229,7 +229,7 @@ model = dict(
     train_cfg=dict(),
     type='EncoderDecoder')
 norm_cfg = dict(requires_grad=True, type='SyncBN')
-num_classes = 18
+num_classes = 19
 optim_wrapper = dict(
     clip_grad=dict(max_norm=0.01, norm_type=2),
     loss_scale='dynamic',

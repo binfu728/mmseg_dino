@@ -269,9 +269,12 @@ class LoadPASTISRaster(BaseTransform):
                              interpolation=cv2.INTER_NEAREST)
 
         # Remap: shift crops 1-18 → 0-17; background (0) and void (≥19) → 255
-        gt_seg_map = ann.astype(np.int64) - 1        
-        gt_seg_map[gt_seg_map < 0] = 255             
-        gt_seg_map[gt_seg_map > 17] = 255            
+        # gt_seg_map = ann.astype(np.int64) - 1        
+        # gt_seg_map[gt_seg_map < 0] = 255             
+        # gt_seg_map[gt_seg_map > 17] = 255            
+
+        gt_seg_map = ann.astype(np.int64)                
+        gt_seg_map[gt_seg_map > 18] = 255  
 
         H = W = self.img_size
         results["img"]        = img
