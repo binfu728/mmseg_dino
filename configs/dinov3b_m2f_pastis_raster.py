@@ -1,15 +1,10 @@
-custom_imports = dict(
-    imports = ['custom_models.dinov3_backbone','custom_datasets.pastis'],
-    allow_failed_imports = False
-)
-
 _base_ = [
-    '/mnt/ht2_nas2/00-model/00-fb/MMcodes/mmsegmentation/configs/mask2former/mask2former_r50_8xb2-160k_ade20k-512x512.py',
+    '../mask2former/mask2former_r50_8xb2-160k_ade20k-512x512.py',
 ]
 
 # ── Paths to set manually ─────────────────────────────────────────────────────
-DINO_CKPT   = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth'
-PASTIS_ROOT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R'   # dir with metadata.geojson, DATA_S2/, ANNOTATIONS/
+DINO_CKPT   = '/home/zifei/.cache/modelscope/hub/models/facebook/dinov3pth/dinov3_vits16_pretrain_lvd1689m-08c60483.pth'
+PASTIS_ROOT = '/home/zifei/dataset/PASTIS-R'   # dir with metadata.geojson, DATA_S2/, ANNOTATIONS/
 # ─────────────────────────────────────────────────────────────────────────────
 
 num_classes = 18    # crop classes 0-17; background (orig 0) → ignore_index=255
@@ -35,7 +30,7 @@ model = dict(
         arch='vit_small',          # vit_small: embed_dim=384; vit_large: 1024
         patch_size=16,
         checkpoint=DINO_CKPT,
-        freeze_backbone=False,      # True=linear probe; False=full finetune
+        freeze_backbone=True,      # True=linear probe; False=full finetune
     ),
     decode_head=dict(
         in_channels=[384, 384, 384, 384],   # ViT-S embed_dim, same across 4 scales
@@ -65,7 +60,6 @@ val_pipeline = [
 train_dataloader = dict(
     batch_size=4,       # 512×512 images; halved vs PixelSet 64×64 config
     num_workers=4,
-    persistent_workers=True,
     dataset=dict(
         _delete_=True,
         type='PASTISRasterDataset',
@@ -77,7 +71,6 @@ train_dataloader = dict(
 val_dataloader = dict(
     batch_size=2,
     num_workers=2,
-    persistent_workers=True,
     dataset=dict(
         _delete_=True,
         type='PASTISRasterDataset',
@@ -121,5 +114,5 @@ test_cfg  = dict(type='TestLoop')
 default_hooks = dict(
     checkpoint=dict(type='CheckpointHook', by_epoch=False,
                     interval=2000, save_best='mIoU'),
-    logger=dict(type='LoggerHook', interval=100, log_metric_by_epoch=False),
+    logger=dict(type='LoggerHook', interval=50, log_metric_by_epoch=False),
 )

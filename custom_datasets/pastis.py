@@ -41,12 +41,10 @@ import json
 
 import numpy as np
 import pandas as pd
-import cv2
-import h5py
 
-from mmcv.transforms import BaseTransform # type: ignore
-from mmseg.registry import DATASETS, TRANSFORMS # type: ignore
-from mmseg.datasets import BaseSegDataset # type: ignore
+from mmcv.transforms import BaseTransform
+from mmseg.registry import DATASETS, TRANSFORMS
+from .basesegdataset import BaseSegDataset
 
 # RGB band indices within the 10-band S2 stack
 # Band order in .npy:  B02, B03, B04, B05, B06, B07, B08, B08A, B11, B12
@@ -64,6 +62,129 @@ PASTIS_RASTER_RGB_MEAN = [1436.7, 1387.7, 1180.2]
 PASTIS_RASTER_RGB_STD  = [1996.2, 1916.8, 1976.7]
 
 _SPLIT_FOLDS = {"train": [1, 2, 3], "val": [4], "test": [5]}
+
+
+@TRANSFORMS.register_module()
+class LoadPASTISPixelSet(BaseTransform):
+    """Load a PASTIS PixelSet parcel and produce a pseudo-2D image.
+
+    Reads ``results['s2_path']`` (path to S2_*.npy) and ``results['label']``
+    (int, 1-18).  Outputs the standard mmseg keys:
+
+    * ``img``        – float32 np.ndarray [H, W, 3], raw reflectance (R, G, B),
+                       NOT normalised (SegDataPreProcessor handles that).
+    * ``gt_seg_map`` – int64 np.ndarray [H, W], constant label 0-17.
+    * ``img_shape``, ``ori_shape`` – (H, W).
+
+    The parcel's N pixels are randomly sampled with replacement to fill
+    H × W positions, then shuffled, so each call produces a different layout.
+
+    Args:
+        grid_size (int): output H = W.  Default 64 → 64×64 pseudo-image.
+    """
+
+    def __init__(self, grid_size: int = 64):
+        self.grid_size = grid_size
+        self.n_pixel = grid_size * grid_size
+
+    def transform(self, results: dict) -> dict:
+        s2 = np.load(results["s2_path"]).astype(np.float32)  # (T, C=10, N)
+
+        # Temporal mean
+        img = s2.mean(axis=0)  # (C=10, N)
+        N = img.shape[-1]
+        n = self.n_pixel
+
+        # Sample n pixels; repeat smaller parcels to fill the grid
+        if N >= n:
+            idx = np.random.choice(N, n, replace=False)
+        else:
+            idx = np.concatenate([
+                np.arange(N),
+                np.random.choice(N, n - N, replace=True),
+            ])
+            np.random.shuffle(idx)
+
+        img = img[_RGB_IDX][:, idx]  # (3, n)  →  R, G, B
+
+        H = W = self.grid_size
+        img = img.reshape(3, H, W).transpose(1, 2, 0).copy()  # (H, W, 3)
+
+        # Parcel label: shift 1-18 → 0-17
+        label = int(results["label"]) - 1
+        gt_seg_map = np.full((H, W), label, dtype=np.int64)
+
+        results["img"] = img
+        results["gt_seg_map"] = gt_seg_map
+        results["img_shape"] = (H, W)
+        results["ori_shape"] = (H, W)
+        results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
+        return results
+
+
+@DATASETS.register_module()
+class PASTISDataset(BaseSegDataset):
+    """PASTIS PixelSet crop-type dataset wrapped for mmsegmentation.
+
+    Each parcel in the metadata is one sample.  The ``LoadPASTISPixelSet``
+    transform turns it into a pseudo-image for use with any mmseg head.
+
+    Args:
+        data_root (str): root directory of PASTIS-R_PixelSet
+                         (must contain ``metadata_parcel.csv`` and ``DATA_S2/``).
+        split     (str): ``'train'`` | ``'val'`` | ``'test'``.
+        pipeline  (list): mmseg transform pipeline.
+    """
+
+    METAINFO = dict(
+        classes=[f"crop_{i}" for i in range(1, 19)],   # 18 classes, 0-indexed
+        palette=[[i * 13 % 256, i * 7 % 256, i * 17 % 256] for i in range(18)],
+    )
+
+    def __init__(self, data_root: str, split: str = "train",
+                 pipeline=None, **kwargs):
+        self._pastis_root = Path(data_root)
+        self._split = split
+        if pipeline is None:
+            pipeline = [
+                dict(type="LoadPASTISPixelSet"),
+                dict(type="PackSegInputs"),
+            ]
+        super().__init__(
+            ann_file="", data_root="",
+            img_suffix=".npy", seg_map_suffix=".npy",
+            pipeline=pipeline,
+            serialize_data=False, lazy_init=True,
+            **kwargs,
+        )
+        self.data_list = self._build_data_list()
+        self._fully_initialized = True
+
+    def _build_data_list(self):
+        meta = pd.read_csv(self._pastis_root / "metadata_parcel.csv")
+        folds = _SPLIT_FOLDS[self._split]
+        meta = meta[meta["Fold"].isin(folds)].copy()
+        s2_dir = self._pastis_root / "DATA_S2"
+        samples = []
+        for _, row in meta.iterrows():
+            pid = int(row["ID_PARCEL"])
+            s2_path = s2_dir / f"S2_{pid}.npy"
+            if s2_path.exists():
+                samples.append({
+                    "s2_path": str(s2_path),
+                    "label": int(row["Label"]),
+                })
+        return samples
+
+    # BaseSegDataset interface
+    def load_data_list(self):
+        return self._build_data_list()
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, idx):
+        return self.pipeline(self.data_list[idx])
 
 
 # ---------------------------------------------------------------------------
@@ -100,11 +221,11 @@ class LoadPASTISRaster(BaseTransform):
     def transform(self, results: dict) -> dict:
         import cv2
 
-        # ================== 修改部分开始 ==================
-        # 直接读取预处理后的 (H, W, 3) 轻量级数据
-        img = np.load(results["s2_path"]).astype(np.float32) 
-        ori_h, ori_w = img.shape[0], img.shape[1]
-        # ================== 修改部分结束 ==================
+        s2 = np.load(results["s2_path"]).astype(np.float32)   # (T, 10, H, W)
+        ori_h, ori_w = s2.shape[-2], s2.shape[-1]
+
+        # Temporal mean → select RGB bands → HWC
+        img = s2.mean(axis=0)[_RGB_IDX].transpose(1, 2, 0).copy()  # (H, W, 3)
 
         # TARGET has shape (3, H, W): channel 0 = semantic labels (0-19)
         ann = np.load(results["ann_path"])[0].astype(np.uint8)  # (H, W), values 0-19
@@ -117,18 +238,15 @@ class LoadPASTISRaster(BaseTransform):
                              interpolation=cv2.INTER_NEAREST)
 
         # Remap: shift crops 1-18 → 0-17; background (0) and void (≥19) → 255
-        # gt_seg_map = ann.astype(np.int64) - 1        
-        # gt_seg_map[gt_seg_map < 0] = 255             
-        # gt_seg_map[gt_seg_map > 17] = 255            
-
-        gt_seg_map = ann.astype(np.int64)                
-        gt_seg_map[gt_seg_map > 18] = 255  
+        gt_seg_map = ann.astype(np.int64) - 1        # 0-17 for crops, -1 for bg, 18 for label=19
+        gt_seg_map[gt_seg_map < 0] = 255             # background → ignore
+        gt_seg_map[gt_seg_map > 17] = 255            # void/out-of-range → ignore
 
         H = W = self.img_size
         results["img"]        = img
         results["gt_seg_map"] = gt_seg_map
         results["img_shape"]  = (H, W)
-        results["ori_shape"]  = (H, W)   
+        results["ori_shape"]  = (H, W)   # both GT and pred live at img_size; avoid postprocess downscale
         results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
         return results
 
@@ -149,14 +267,9 @@ class PASTISRasterDataset(BaseSegDataset):
         pipeline  (list): mmseg transform pipeline.
     """
 
-    # METAINFO = dict(
-    #     classes=[f"crop_{i}" for i in range(1, 19)],   # 18 classes, 0-indexed
-    #     palette=[[i * 13 % 256, i * 7 % 256, i * 17 % 256] for i in range(18)],
-    # )
-
     METAINFO = dict(
-        classes=["background"] + [f"crop_{i}" for i in range(1, 19)],
-        palette=[[0, 0, 0]] + [[i * 13 % 256, i * 7 % 256, i * 17 % 256] for i in range(18)],
+        classes=[f"crop_{i}" for i in range(1, 19)],   # 18 classes, 0-indexed
+        palette=[[i * 13 % 256, i * 7 % 256, i * 17 % 256] for i in range(18)],
     )
 
     def __init__(self, data_root: str, split: str = "train",
@@ -178,47 +291,14 @@ class PASTISRasterDataset(BaseSegDataset):
         self.data_list = self._build_data_list()
         self._fully_initialized = True
 
-    # def _build_data_list(self):
-    #     # PASTIS-R uses metadata.geojson (GeoJSON FeatureCollection).
-    #     # Each feature's properties contain: ID_PATCH (int), Fold (1-5), ...
-    #     with open(self._pastis_root / "metadata.geojson") as f:
-    #         geojson = json.load(f)
-
-    #     folds = _SPLIT_FOLDS[self._split]
-    #     s2_dir  = self._pastis_root / "DATA_S2"
-    #     ann_dir = self._pastis_root / "ANNOTATIONS"
-
-    #     samples = []
-    #     for feat in geojson["features"]:
-    #         props = feat["properties"]
-    #         if props["Fold"] not in folds:
-    #             continue
-    #         pid = int(props["ID_PATCH"])
-    #         s2_path  = s2_dir  / f"S2_{pid}.npy"
-    #         ann_path = ann_dir / f"TARGET_{pid}.npy"
-    #         if s2_path.exists() and ann_path.exists():
-    #             samples.append({
-    #                 "s2_path":  str(s2_path),
-    #                 "ann_path": str(ann_path),
-    #             })
-    #     return samples
-
     def _build_data_list(self):
-        # ================== 修改部分开始 ==================
-        # 增加缓存机制：把有效文件路径存为 json 索引，避免在 NAS 上反复遍历
-        cache_file = self._pastis_root / f"cache_{self._split}_mean_list.json"
-        if cache_file.exists():
-            # 第二次运行直接秒开读取
-            with open(cache_file, 'r') as f:
-                return json.load(f)
-
-        # 第一次运行：解析 geojson
+        # PASTIS-R uses metadata.geojson (GeoJSON FeatureCollection).
+        # Each feature's properties contain: ID_PATCH (int), Fold (1-5), ...
         with open(self._pastis_root / "metadata.geojson") as f:
             geojson = json.load(f)
 
         folds = _SPLIT_FOLDS[self._split]
-        
-        s2_dir  = self._pastis_root / "DATA_S2_RGB_MEAN"
+        s2_dir  = self._pastis_root / "DATA_S2"
         ann_dir = self._pastis_root / "ANNOTATIONS"
 
         samples = []
@@ -229,18 +309,11 @@ class PASTISRasterDataset(BaseSegDataset):
             pid = int(props["ID_PATCH"])
             s2_path  = s2_dir  / f"S2_{pid}.npy"
             ann_path = ann_dir / f"TARGET_{pid}.npy"
-            
-            # NAS上的 exists() 很慢，所以我们把成功的结果缓存下来
             if s2_path.exists() and ann_path.exists():
                 samples.append({
                     "s2_path":  str(s2_path),
                     "ann_path": str(ann_path),
                 })
-                
-        # 写入缓存文件
-        with open(cache_file, 'w') as f:
-            json.dump(samples, f)
-            
         return samples
 
     def load_data_list(self):
