@@ -7,15 +7,17 @@
 #
 # Launch: bash jzf/train.sh   (needs PYTHONPATH=<mmsegmentation root> for jzf.*)
 
-_base_ = ['../../configs/mask2former/mask2former_r50_8xb2-160k_ade20k-512x512.py']
+_base_ = [
+    '/mnt/ht2_nas2/00-model/00-fb/MMcodes/mmsegmentation/configs/mask2former/mask2former_r50_8xb2-160k_ade20k-512x512.py',
+]
 
 custom_imports = dict(
-    imports=['jzf.pastis_temporal', 'jzf.dinov3_temporal_backbone'],
-    allow_failed_imports=False)
+    imports = ['custom_models.dinov3_temporal_backbone_zjf','custom_datasets.pastis_temporal_zjf'],
+    allow_failed_imports = False
+)
 
-DINO_CKPT = ('/home/zifei/.cache/modelscope/hub/models/facebook/dinov3pth/'
-             'dinov3_vits16_pretrain_lvd1689m-08c60483.pth')
-PASTIS_ROOT = '/home/zifei/dataset/PASTIS-R'
+DINO_CKPT   = '/mnt/ht2-nas2/00-model/00-fb/mmseg_data/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth'
+PASTIS_ROOT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R'
 
 num_classes = 19   # background(0) + 18 crops; void(19) -> 255
 img_size = 256     # 128 native x2; ViT-S/16 -> 16x16 tokens per frame

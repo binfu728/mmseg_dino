@@ -1,9 +1,7 @@
 custom_imports = dict(
     imports=[
-        'custom_datasets.pastis',
         'custom_datasets.pastis_temporal',
         'custom_models.dinov3_temporal_backbone',
-        'mmdet.models',
     ],
     allow_failed_imports=False,
 )
@@ -22,9 +20,10 @@ n_frames        = 12
 total_channels  = n_frames * in_bands   # 120
 
 data_preprocessor = dict(
+    _delete_=True,
     type='SegDataPreProcessor',
-    mean=[0.0] * total_channels,
-    std=[1.0] * total_channels,
+    mean=None,
+    std=None,
     bgr_to_rgb=False,
     pad_val=0,
     seg_pad_val=255,
@@ -101,6 +100,7 @@ test_evaluator = val_evaluator
 
 embed_multi = dict(lr_mult=1.0, decay_mult=0.0)
 optim_wrapper = dict(
+    _delete_=True,
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=1e-4, weight_decay=0.05,
                    eps=1e-8, betas=(0.9, 0.999)),

@@ -16,8 +16,8 @@ in_bands    = 10
 
 data_preprocessor = dict(
     type='SegDataPreProcessor',
-    mean=[0.0] * in_bands,
-    std=[1.0] * in_bands,
+    mean=None,
+    std=None,
     bgr_to_rgb=False,
     pad_val=0,
     seg_pad_val=255,
@@ -93,6 +93,7 @@ test_evaluator = val_evaluator
 
 embed_multi = dict(lr_mult=1.0, decay_mult=0.0)
 optim_wrapper = dict(
+    _delete_=True,
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=1e-4, weight_decay=0.05,
                    eps=1e-8, betas=(0.9, 0.999)),

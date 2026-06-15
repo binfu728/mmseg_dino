@@ -21,9 +21,10 @@ n_frames        = 12
 total_channels  = n_frames * in_bands   # 120
 
 data_preprocessor = dict(
+    _delete_=True,
     type='SegDataPreProcessor',
-    mean=[0.0] * total_channels,
-    std=[1.0] * total_channels,
+    mean=None,
+    std=None,
     bgr_to_rgb=False,
     pad_val=0,
     seg_pad_val=255,
@@ -71,7 +72,7 @@ val_pipeline = [
 ]
 
 train_dataloader = dict(
-    batch_size=16,
+    batch_size=8,
     num_workers=4,
     persistent_workers=True,
     dataset=dict(
@@ -101,6 +102,7 @@ test_evaluator = val_evaluator
 
 embed_multi = dict(lr_mult=1.0, decay_mult=0.0)
 optim_wrapper = dict(
+    _delete_=True,
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=1e-4, weight_decay=0.05,
                    eps=1e-8, betas=(0.9, 0.999)),
@@ -108,7 +110,7 @@ optim_wrapper = dict(
     paramwise_cfg=dict(
         custom_keys={
             # 修复：仅对ViT本身（预训练权重）缩小学习率，保证Adapter正常收敛
-            'backbone.adapter.backbone': dict(lr_mult=0.005, decay_mult=1.0),
+            'backbone.adapter.backbone': dict(lr_mult=0.05, decay_mult=1.0),
             'backbone.adapter.backbone.patch_embed': dict(lr_mult=1.0, decay_mult=1.0),
             'backbone.adapter.spm.stem': dict(lr_mult=1.0, decay_mult=1.0),
             'query_embed': embed_multi,

@@ -15,7 +15,7 @@ import torch.nn as nn
 from mmcv.ops.multi_scale_deform_attn import MultiScaleDeformableAttnFunction
 
 from mmseg.registry import MODELS
-from mmseg.models.backbones.dinov3_backbone import DINOv3BackboneMmseg
+from custom_models.dinov3_backbone import DINOv3BackboneMmseg
 
 # mmcv's ms_deform_attn CUDA kernel has no BFloat16 variant; under bf16
 # autocast (used because fp16 NaNs in the M2F mask BCE) run MSDA in fp32.

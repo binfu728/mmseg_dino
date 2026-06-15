@@ -1,9 +1,7 @@
 custom_imports = dict(
     imports=[
-        'custom_datasets.pastis',
         'custom_datasets.pastis_temporal',
         'custom_models.dinov3_temporal_backbone_v2',
-        'mmdet.models',
     ],
     allow_failed_imports=False,
 )
@@ -23,8 +21,8 @@ total_channels  = n_frames * in_bands   # 120
 
 data_preprocessor = dict(
     type='SegDataPreProcessor',
-    mean=[0.0] * total_channels,
-    std=[1.0] * total_channels,
+    mean=None,
+    std=None,
     bgr_to_rgb=False,
     pad_val=0,
     seg_pad_val=255,
@@ -40,7 +38,6 @@ model = dict(
         arch='vit_small',
         patch_size=16,
         checkpoint=DINO_CKPT,
-        interaction_indexes=[2, 5, 8, 11],
         freeze_backbone=False,
         in_bands=in_bands,
         n_frames=n_frames,
@@ -71,7 +68,7 @@ val_pipeline = [
 ]
 
 train_dataloader = dict(
-    batch_size=16,
+    batch_size=4,
     num_workers=4,
     persistent_workers=True,
     dataset=dict(
@@ -83,8 +80,8 @@ train_dataloader = dict(
     ),
 )
 val_dataloader = dict(
-    batch_size=4,
-    num_workers=4,
+    batch_size=2,
+    num_workers=2,
     persistent_workers=True,
     dataset=dict(
         _delete_=True,
@@ -101,6 +98,7 @@ test_evaluator = val_evaluator
 
 embed_multi = dict(lr_mult=1.0, decay_mult=0.0)
 optim_wrapper = dict(
+    _delete_=True,
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=1e-4, weight_decay=0.05,
                    eps=1e-8, betas=(0.9, 0.999)),
