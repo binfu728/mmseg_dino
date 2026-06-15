@@ -16,19 +16,7 @@ if _DINO_ROOT not in sys.path:
 
 
 class _MmcvMSDeformAttn(nn.Module):
-    """Drop-in replacement for DINOv3's MSDeformAttn backed by mmcv's CUDA extension.
-
-    Matches DINOv3's MSDeformAttn __init__ and forward signatures exactly so it
-    can be swapped in-place inside DINOv3_Adapter without touching adapter code.
-
-    `ratio` is accepted for API compatibility but not used — mmcv's MSDA always
-    operates at full d_model. This differs from DINOv3's default ratio=0.5 but
-    avoids a double value-projection bug. Requires starting training fresh (no
-    --resume from checkpoints saved with the original MSDeformAttn).
-
-    mmcv adds an internal residual; we suppress it (identity=zeros) because
-    Extractor.forward() adds the residual externally.
-    """
+    """Drop-in replacement for DINOv3's MSDeformAttn backed by mmcv's CUDA extension."""
 
     def __init__(self, d_model=256, n_levels=4, n_heads=8, n_points=4, ratio=1.0):
         super().__init__()
@@ -63,26 +51,26 @@ class DINOv3BackboneMmseg(BaseModule):
     """DINOv3 ViT + DINOv3_Adapter wrapped as an mmseg backbone.
 
     Returns a tuple of 4 feature maps at strides [4, 8, 16, 32].
-    All outputs have `embed_dim` channels (768 for ViT-B, 1024 for ViT-L).
+    All outputs have `embed_dim` channels (1024 for ViT-L).
 
     Args:
-        arch: ViT variant, e.g. 'vit_base' or 'vit_large'.
-        patch_size: ViT patch size (16 or 14).
+        arch: ViT variant, e.g. 'vit_large'.
+        patch_size: ViT patch size (16).
         checkpoint: Path to pretrained weights (.pth file or DCP directory).
-            Pass None or '' to train from scratch.
         interaction_indexes: Which transformer block outputs to use for the
-            4 interaction stages. Defaults suit ViT-B (12 blocks).
-        freeze_backbone: Whether to keep ViT weights frozen. The adapter
-            interaction layers are always trainable.
+            4 interaction stages.
+        freeze_backbone: Whether to keep ViT weights frozen.
+        in_bands: Number of input bands. When != 3, a learnable 1x1 Conv
+            projects to 3-channel RGB before the ViT, initialized with
+            RGB bands copied through and remaining bands set to zero.
         init_cfg: Ignored; weight loading is handled by build_model_for_eval.
     """
 
-    # ViT-B has 12 blocks; use four evenly spaced indices.
     _DEFAULT_INTERACTION_INDEXES = {
         "vit_small": [2, 5, 8, 11],
-        "vit_base": [2, 5, 8, 11],
+        "vit_base":  [2, 5, 8, 11],
         "vit_large": [5, 11, 17, 23],
-        "vit_huge": [7, 15, 23, 31],
+        "vit_huge":  [7, 15, 23, 31],
     }
 
     def __init__(
@@ -92,9 +80,10 @@ class DINOv3BackboneMmseg(BaseModule):
         checkpoint=None,
         interaction_indexes=None,
         freeze_backbone: bool = False,
+        in_bands: int = 3,
         init_cfg=None,
     ):
-        super().__init__(init_cfg=None)  # skip mmengine weight init
+        super().__init__(init_cfg=None)
 
         from omegaconf import OmegaConf
         from dinov3.models import build_model_for_eval
@@ -134,20 +123,23 @@ class DINOv3BackboneMmseg(BaseModule):
             )
 
         self.adapter = DINOv3_Adapter(vit, interaction_indexes=interaction_indexes)
-
-        # Replace every MSDeformAttn in the adapter with the mmcv-backed wrapper.
-        # This must happen after DINOv3_Adapter.__init__ (which calls _reset_parameters
-        # on the original modules) so the new modules get their own init_weights call.
         self._replace_msda_with_mmcv()
 
-        # DINOv3_Adapter always freezes the inner backbone; optionally unfreeze.
         if not freeze_backbone:
             self.adapter.backbone.requires_grad_(True)
 
         self.embed_dim = vit.embed_dim
 
+        if in_bands != 3:
+            self.input_proj = nn.Conv2d(in_bands, 3, kernel_size=1)
+            nn.init.zeros_(self.input_proj.weight)
+            for rgb_i, band_i in enumerate([2, 1, 0]):
+                self.input_proj.weight.data[rgb_i, band_i, 0, 0] = 1.0
+            nn.init.zeros_(self.input_proj.bias)
+        else:
+            self.input_proj = nn.Identity()
+
     def _replace_msda_with_mmcv(self):
-        """Swap all DINOv3 MSDeformAttn modules with _MmcvMSDeformAttn."""
         from dinov3.eval.segmentation.models.utils.ms_deform_attn import MSDeformAttn
 
         for parent in self.adapter.modules():
@@ -164,7 +156,6 @@ class DINOv3BackboneMmseg(BaseModule):
                     setattr(parent, name, replacement)
 
     def forward(self, x):
-        # DINOv3_Adapter returns {"1": f1, "2": f2, "3": f3, "4": f4}
-        # strides: f1=4, f2=8, f3=16, f4=32
+        x = self.input_proj(x)
         out = self.adapter(x)
         return (out["1"], out["2"], out["3"], out["4"])
