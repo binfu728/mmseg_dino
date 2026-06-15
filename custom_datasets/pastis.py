@@ -58,22 +58,21 @@ class LoadPASTISRaster(BaseTransform):
         results["seg_fields"] = results.get("seg_fields", []) + ["gt_seg_map"]
         return results
 
-
 @TRANSFORMS.register_module()
 class PASTISRandomRotate90(BaseTransform):
+    """Rotate img + seg maps by a random multiple of 90° (square inputs)."""
     def __init__(self, prob: float = 0.75):
         self.prob = prob
 
     def transform(self, results: dict) -> dict:
-        if np.random.random() < self.prob:
-            k = np.random.randint(0, 4)
-            if k > 0:
-                results["img"] = np.rot90(results["img"], k, axes=(0, 1)).copy()
-                results["gt_seg_map"] = np.rot90(results["gt_seg_map"], k,
-                                                  axes=(0, 1)).copy()
+        if np.random.rand() >= self.prob:
+            return results
+        k = np.random.randint(1, 4)
+        results["img"] = np.ascontiguousarray(np.rot90(results["img"], k))
+        for key in results.get("seg_fields", []):
+            results[key] = np.ascontiguousarray(np.rot90(results[key], k))
         return results
-
-
+        
 @DATASETS.register_module()
 class PASTISRasterDataset(BaseSegDataset):
 

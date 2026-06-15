@@ -12,7 +12,7 @@ _base_ = [
     '/mnt/ht2_nas2/00-model/00-fb/MMcodes/mmsegmentation/configs/mask2former/mask2former_r50_8xb2-160k_ade20k-512x512.py',
 ]
 
-DINO_CKPT   = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth'
+DINO_CKPT   = '/mnt/ht2-nas2/00-model/00-fb/mmseg_data/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth'
 PASTIS_ROOT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R'
 
 num_classes     = 19
@@ -37,16 +37,16 @@ model = dict(
     backbone=dict(
         _delete_=True,
         type='DINOv3TemporalBackbone_v2',
-        arch='vit_large',
+        arch='vit_small',
         patch_size=16,
         checkpoint=DINO_CKPT,
-        interaction_indexes=[5, 11, 17, 23],
+        interaction_indexes=[2, 5, 8, 11],
         freeze_backbone=False,
         in_bands=in_bands,
         n_frames=n_frames,
     ),
     decode_head=dict(
-        in_channels=[1024, 1024, 1024, 1024],
+        in_channels=[384, 384, 384, 384],
         strides=[4, 8, 16, 32],
         num_classes=num_classes,
         loss_cls=dict(
@@ -71,7 +71,7 @@ val_pipeline = [
 ]
 
 train_dataloader = dict(
-    batch_size=4,
+    batch_size=16,
     num_workers=4,
     persistent_workers=True,
     dataset=dict(

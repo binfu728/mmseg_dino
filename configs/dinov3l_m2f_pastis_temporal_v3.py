@@ -1,6 +1,5 @@
 custom_imports = dict(
     imports=[
-        'custom_datasets.pastis',
         'custom_datasets.pastis_temporal',
         'custom_models.dinov3_temporal_backbone_v2',
         'mmdet.models',
@@ -44,6 +43,7 @@ model = dict(
         freeze_backbone=False,
         in_bands=in_bands,
         n_frames=n_frames,
+        drop_path_rate = 0.3
     ),
     decode_head=dict(
         in_channels=[1024, 1024, 1024, 1024],
@@ -71,7 +71,7 @@ val_pipeline = [
 ]
 
 train_dataloader = dict(
-    batch_size=4,
+    batch_size=16,
     num_workers=4,
     persistent_workers=True,
     dataset=dict(
@@ -108,7 +108,9 @@ optim_wrapper = dict(
     paramwise_cfg=dict(
         custom_keys={
             # 修复：仅对ViT本身（预训练权重）缩小学习率，保证Adapter正常收敛
-            'backbone.adapter.backbone': dict(lr_mult=0.1, decay_mult=1.0),
+            'backbone.adapter.backbone': dict(lr_mult=0.005, decay_mult=1.0),
+            'backbone.adapter.backbone.patch_embed': dict(lr_mult=1.0, decay_mult=1.0),
+            'backbone.adapter.spm.stem': dict(lr_mult=1.0, decay_mult=1.0),
             'query_embed': embed_multi,
             'query_feat':  embed_multi,
             'level_embed': embed_multi,

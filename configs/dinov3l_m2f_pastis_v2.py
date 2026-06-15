@@ -1,11 +1,6 @@
 custom_imports = dict(
-    imports=[
-        'custom_datasets.pastis',
-        'custom_datasets.pastis_temporal',
-        'custom_models.dinov3_temporal_backbone_v2',
-        'mmdet.models',
-    ],
-    allow_failed_imports=False,
+    imports = ['custom_models.dinov3_backbone_v2','custom_datasets.pastis'],
+    allow_failed_imports = False
 )
 
 _base_ = [
@@ -15,16 +10,14 @@ _base_ = [
 DINO_CKPT   = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth'
 PASTIS_ROOT = '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R'
 
-num_classes     = 19
-img_size        = 256
-in_bands        = 10
-n_frames        = 12
-total_channels  = n_frames * in_bands   # 120
+num_classes = 19
+img_size    = 256
+in_bands    = 10
 
 data_preprocessor = dict(
     type='SegDataPreProcessor',
-    mean=[0.0] * total_channels,
-    std=[1.0] * total_channels,
+    mean=[0.0] * in_bands,
+    std=[1.0] * in_bands,
     bgr_to_rgb=False,
     pad_val=0,
     seg_pad_val=255,
@@ -36,14 +29,13 @@ model = dict(
     data_preprocessor=data_preprocessor,
     backbone=dict(
         _delete_=True,
-        type='DINOv3TemporalBackbone_v2',
+        type='DINOv3BackboneMmseg_v2',
         arch='vit_large',
         patch_size=16,
         checkpoint=DINO_CKPT,
         interaction_indexes=[5, 11, 17, 23],
         freeze_backbone=False,
         in_bands=in_bands,
-        n_frames=n_frames,
     ),
     decode_head=dict(
         in_channels=[1024, 1024, 1024, 1024],
@@ -60,13 +52,13 @@ model = dict(
 )
 
 train_pipeline = [
-    dict(type='LoadPASTISRasterTemporal', img_size=img_size, num_classes=num_classes),
+    dict(type='LoadPASTISRaster', img_size=img_size, num_classes=num_classes),
     dict(type='RandomFlip', prob=0.5, direction=['horizontal', 'vertical']),
     dict(type='PASTISRandomRotate90', prob=0.75),
     dict(type='PackSegInputs'),
 ]
 val_pipeline = [
-    dict(type='LoadPASTISRasterTemporal', img_size=img_size, num_classes=num_classes),
+    dict(type='LoadPASTISRaster', img_size=img_size, num_classes=num_classes),
     dict(type='PackSegInputs'),
 ]
 
@@ -76,7 +68,7 @@ train_dataloader = dict(
     persistent_workers=True,
     dataset=dict(
         _delete_=True,
-        type='PASTISRasterTemporalDataset',
+        type='PASTISRasterDataset',
         data_root=PASTIS_ROOT,
         split='train',
         pipeline=train_pipeline,
@@ -88,7 +80,7 @@ val_dataloader = dict(
     persistent_workers=True,
     dataset=dict(
         _delete_=True,
-        type='PASTISRasterTemporalDataset',
+        type='PASTISRasterDataset',
         data_root=PASTIS_ROOT,
         split='val',
         pipeline=val_pipeline,
@@ -107,7 +99,6 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=0.01, norm_type=2),
     paramwise_cfg=dict(
         custom_keys={
-            # 修复：仅对ViT本身（预训练权重）缩小学习率，保证Adapter正常收敛
             'backbone.adapter.backbone': dict(lr_mult=0.1, decay_mult=1.0),
             'query_embed': embed_multi,
             'query_feat':  embed_multi,
@@ -127,6 +118,6 @@ test_cfg  = dict(type='TestLoop')
 
 default_hooks = dict(
     checkpoint=dict(type='CheckpointHook', by_epoch=False,
-                    interval=2000, save_best='mIoU', max_keep_ckpts=3),
+                    interval=1000, save_best='mIoU', max_keep_ckpts=3),
     logger=dict(type='LoggerHook', interval=50, log_metric_by_epoch=False),
 )
