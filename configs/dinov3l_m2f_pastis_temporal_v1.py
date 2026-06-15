@@ -42,8 +42,7 @@ model = dict(
         interaction_indexes=[5, 11, 17, 23],
         freeze_backbone=False,
         in_bands=in_bands,
-        n_frames=n_frames,
-        drop_path_rate = 0.3
+        n_frames=n_frames
     ),
     decode_head=dict(
         in_channels=[1024, 1024, 1024, 1024],
