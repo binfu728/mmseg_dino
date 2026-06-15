@@ -11,19 +11,13 @@ import json
 import numpy as np
 
 from mmcv.transforms import BaseTransform
-<<<<<<< HEAD
-from mmseg.registry import DATASETS, TRANSFORMS
+from mmseg.datasets.basesegdataset import BaseSegDataset
+from mmengine.registry import TRANSFORMS
 from mmseg.registry import DATASETS
 
 # RGB band indices within the 10-band S2 stack
 # Band order in .npy:  B02, B03, B04, B05, B06, B07, B08, B08A, B11, B12
 # RGB = B04 (Red, idx 2), B03 (Green, idx 1), B02 (Blue, idx 0)
-_RGB_IDX = [2, 1, 0]
-=======
-from mmseg.datasets.basesegdataset import BaseSegDataset
-from mmengine.registry import TRANSFORMS
-from mmseg.registry import DATASETS
->>>>>>> 956313c76c03b586186bab5e4b98bfc2eb4d2585
 
 _S2_10B_MEAN = [1180.2, 1387.7, 1436.7, 1773.7, 2735.8, 3080.1, 3223.6, 3338.3, 2418.1, 1630.2]
 _S2_10B_STD  = [1976.7, 1916.8, 1996.2, 1903.1, 1784.9, 1796.3, 1811.8, 1793.3, 1474.4, 1309.8]
