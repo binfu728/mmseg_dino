@@ -8,42 +8,19 @@ crop_size = (
 custom_imports = dict(
     allow_failed_imports=False,
     imports=[
-        'custom_datasets.pastis',
-        'custom_models.dinov3_backbone',
-        'mmdet.models',
+        'custom_datasets.pastis_temporal',
+        'custom_models.dinov3_temporal_backbone_v2',
     ])
 data_preprocessor = dict(
     bgr_to_rgb=False,
-    mean=[
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
+    mean=None,
     pad_val=0,
     seg_pad_val=255,
     size=(
         256,
         256,
     ),
-    std=[
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-    ],
+    std=None,
     test_cfg=dict(size_divisor=32),
     type='SegDataPreProcessor')
 data_root = 'data/ade/ADEChallengeData2016'
@@ -51,7 +28,7 @@ dataset_type = 'ADE20KDataset'
 default_hooks = dict(
     checkpoint=dict(
         by_epoch=False,
-        interval=1000,
+        interval=2000,
         max_keep_ckpts=3,
         save_best='mIoU',
         type='CheckpointHook'),
@@ -85,6 +62,7 @@ model = dict(
         arch='vit_large',
         checkpoint=
         '/mnt/ht2_nas2/00-model/00-fb/mmseg_data/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth',
+        drop_path_rate=0.3,
         freeze_backbone=False,
         in_bands=10,
         interaction_indexes=[
@@ -93,40 +71,19 @@ model = dict(
             17,
             23,
         ],
+        n_frames=12,
         patch_size=16,
-        type='DINOv3BackboneMmseg'),
+        type='DINOv3TemporalBackbone_v2'),
     data_preprocessor=dict(
         bgr_to_rgb=False,
-        mean=[
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-        ],
+        mean=None,
         pad_val=0,
         seg_pad_val=255,
         size=(
             256,
             256,
         ),
-        std=[
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-        ],
+        std=None,
         test_cfg=dict(size_divisor=32),
         type='SegDataPreProcessor'),
     decode_head=dict(
@@ -267,6 +224,7 @@ model = dict(
     test_cfg=dict(mode='whole'),
     train_cfg=dict(),
     type='EncoderDecoder')
+n_frames = 12
 num_classes = 19
 optim_wrapper = dict(
     clip_grad=dict(max_norm=0.01, norm_type=2),
@@ -280,12 +238,20 @@ optim_wrapper = dict(
         type='AdamW',
         weight_decay=0.05),
     paramwise_cfg=dict(
-        custom_keys=dict(
-            backbone=dict(decay_mult=1.0, lr_mult=0.1),
-            input_proj=dict(lr_mult=1.0),
-            level_embed=dict(decay_mult=0.0, lr_mult=1.0),
-            query_embed=dict(decay_mult=0.0, lr_mult=1.0),
-            query_feat=dict(decay_mult=0.0, lr_mult=1.0)),
+        custom_keys=dict({
+            'backbone.adapter.backbone':
+            dict(decay_mult=1.0, lr_mult=0.05),
+            'backbone.adapter.backbone.patch_embed':
+            dict(decay_mult=1.0, lr_mult=1.0),
+            'backbone.adapter.spm.stem':
+            dict(decay_mult=1.0, lr_mult=1.0),
+            'level_embed':
+            dict(decay_mult=0.0, lr_mult=1.0),
+            'query_embed':
+            dict(decay_mult=0.0, lr_mult=1.0),
+            'query_feat':
+            dict(decay_mult=0.0, lr_mult=1.0)
+        }),
         norm_decay_mult=0.0),
     type='OptimWrapper')
 optimizer = dict(
@@ -316,12 +282,13 @@ test_dataloader = dict(
     dataset=dict(
         data_root='/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R',
         pipeline=[
-            dict(img_size=256, num_classes=19, type='LoadPASTISRaster'),
+            dict(
+                img_size=256, num_classes=19, type='LoadPASTISRasterTemporal'),
             dict(type='PackSegInputs'),
         ],
         split='val',
-        type='PASTISRasterDataset'),
-    num_workers=2,
+        type='PASTISRasterTemporalDataset'),
+    num_workers=4,
     persistent_workers=True,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 test_evaluator = dict(
@@ -337,13 +304,15 @@ test_pipeline = [
     dict(reduce_zero_label=True, type='LoadAnnotations'),
     dict(type='PackSegInputs'),
 ]
+total_channels = 120
 train_cfg = dict(max_iters=20000, type='IterBasedTrainLoop', val_interval=1000)
 train_dataloader = dict(
     batch_size=4,
     dataset=dict(
         data_root='/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R',
         pipeline=[
-            dict(img_size=256, num_classes=19, type='LoadPASTISRaster'),
+            dict(
+                img_size=256, num_classes=19, type='LoadPASTISRasterTemporal'),
             dict(
                 direction=[
                     'horizontal',
@@ -355,12 +324,12 @@ train_dataloader = dict(
             dict(type='PackSegInputs'),
         ],
         split='train',
-        type='PASTISRasterDataset'),
+        type='PASTISRasterTemporalDataset'),
     num_workers=4,
     persistent_workers=True,
     sampler=dict(shuffle=True, type='InfiniteSampler'))
 train_pipeline = [
-    dict(img_size=256, num_classes=19, type='LoadPASTISRaster'),
+    dict(img_size=256, num_classes=19, type='LoadPASTISRasterTemporal'),
     dict(direction=[
         'horizontal',
         'vertical',
@@ -400,12 +369,13 @@ val_dataloader = dict(
     dataset=dict(
         data_root='/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R',
         pipeline=[
-            dict(img_size=256, num_classes=19, type='LoadPASTISRaster'),
+            dict(
+                img_size=256, num_classes=19, type='LoadPASTISRasterTemporal'),
             dict(type='PackSegInputs'),
         ],
         split='val',
-        type='PASTISRasterDataset'),
-    num_workers=2,
+        type='PASTISRasterTemporalDataset'),
+    num_workers=4,
     persistent_workers=True,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 val_evaluator = dict(
@@ -413,7 +383,7 @@ val_evaluator = dict(
         'mIoU',
     ], type='IoUMetric')
 val_pipeline = [
-    dict(img_size=256, num_classes=19, type='LoadPASTISRaster'),
+    dict(img_size=256, num_classes=19, type='LoadPASTISRasterTemporal'),
     dict(type='PackSegInputs'),
 ]
 vis_backends = [
@@ -425,4 +395,4 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
     ])
-work_dir = './work_dirs/dinov3l_m2f_pastis_v1'
+work_dir = './work_dirs/dinov3l_m2f_pastis_temporal_v3'

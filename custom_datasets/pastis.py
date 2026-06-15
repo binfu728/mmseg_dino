@@ -44,7 +44,7 @@ import pandas as pd
 
 from mmcv.transforms import BaseTransform
 from mmseg.registry import DATASETS, TRANSFORMS
-from .basesegdataset import BaseSegDataset
+from mmseg.registry import DATASETS
 
 # RGB band indices within the 10-band S2 stack
 # Band order in .npy:  B02, B03, B04, B05, B06, B07, B08, B08A, B11, B12

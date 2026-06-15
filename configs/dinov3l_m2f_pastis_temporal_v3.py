@@ -2,7 +2,6 @@ custom_imports = dict(
     imports=[
         'custom_datasets.pastis_temporal',
         'custom_models.dinov3_temporal_backbone_v2',
-        'mmdet.models',
     ],
     allow_failed_imports=False,
 )
@@ -72,7 +71,7 @@ val_pipeline = [
 ]
 
 train_dataloader = dict(
-    batch_size=8,
+    batch_size=4,
     num_workers=4,
     persistent_workers=True,
     dataset=dict(

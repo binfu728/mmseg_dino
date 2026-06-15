@@ -10,7 +10,6 @@ custom_imports = dict(
     imports=[
         'custom_datasets.pastis_temporal',
         'custom_models.dinov3_temporal_backbone_v2',
-        'mmdet.models',
     ])
 data_preprocessor = dict(
     bgr_to_rgb=False,
@@ -308,7 +307,7 @@ test_pipeline = [
 total_channels = 120
 train_cfg = dict(max_iters=20000, type='IterBasedTrainLoop', val_interval=1000)
 train_dataloader = dict(
-    batch_size=8,
+    batch_size=4,
     dataset=dict(
         data_root='/mnt/ht2_nas2/00-model/00-fb/mmseg_data/PASTIS-R',
         pipeline=[

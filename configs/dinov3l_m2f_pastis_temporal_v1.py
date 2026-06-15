@@ -43,6 +43,7 @@ model = dict(
         freeze_backbone=False,
         in_bands=in_bands,
         n_frames=n_frames,
+        drop_path_rate = 0.3
     ),
     decode_head=dict(
         in_channels=[1024, 1024, 1024, 1024],
@@ -107,8 +108,10 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=0.01, norm_type=2),
     paramwise_cfg=dict(
         custom_keys={
-            'backbone': dict(lr_mult=0.1, decay_mult=1.0),
-            'input_proj': dict(lr_mult=1.0),
+            # 修复：仅对ViT本身（预训练权重）缩小学习率，保证Adapter正常收敛
+            'backbone.adapter.backbone': dict(lr_mult=0.05, decay_mult=1.0),
+            'backbone.adapter.backbone.patch_embed': dict(lr_mult=1.0, decay_mult=1.0),
+            'backbone.adapter.spm.stem': dict(lr_mult=1.0, decay_mult=1.0),
             'query_embed': embed_multi,
             'query_feat':  embed_multi,
             'level_embed': embed_multi,
