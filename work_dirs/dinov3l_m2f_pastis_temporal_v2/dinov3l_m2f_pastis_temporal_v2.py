@@ -10,7 +10,7 @@ custom_imports = dict(
     imports=[
         'custom_datasets.pastis',
         'custom_datasets.pastis_temporal',
-        'custom_models.dinov3_temporal_backbone',
+        'custom_models.dinov3_temporal_backbone_v2',
         'mmdet.models',
     ])
 data_preprocessor = dict(
@@ -316,7 +316,7 @@ model = dict(
         ],
         n_frames=12,
         patch_size=16,
-        type='DINOv3TemporalBackbone'),
+        type='DINOv3TemporalBackbone_v2'),
     data_preprocessor=dict(
         bgr_to_rgb=False,
         mean=[
@@ -713,8 +713,6 @@ n_frames = 12
 num_classes = 19
 optim_wrapper = dict(
     clip_grad=dict(max_norm=0.01, norm_type=2),
-    dtype='bfloat16',
-    loss_scale='dynamic',
     optimizer=dict(
         betas=(
             0.9,
@@ -725,14 +723,20 @@ optim_wrapper = dict(
         type='AdamW',
         weight_decay=0.05),
     paramwise_cfg=dict(
-        custom_keys=dict(
-            backbone=dict(decay_mult=1.0, lr_mult=0.1),
-            input_proj=dict(lr_mult=1.0),
-            level_embed=dict(decay_mult=0.0, lr_mult=1.0),
-            query_embed=dict(decay_mult=0.0, lr_mult=1.0),
-            query_feat=dict(decay_mult=0.0, lr_mult=1.0)),
+        custom_keys=dict({
+            'backbone':
+            dict(decay_mult=1.0, lr_mult=0.1),
+            'backbone.adapter.backbone':
+            dict(decay_mult=1.0, lr_mult=0.1),
+            'level_embed':
+            dict(decay_mult=0.0, lr_mult=1.0),
+            'query_embed':
+            dict(decay_mult=0.0, lr_mult=1.0),
+            'query_feat':
+            dict(decay_mult=0.0, lr_mult=1.0)
+        }),
         norm_decay_mult=0.0),
-    type='AmpOptimWrapper')
+    type='OptimWrapper')
 optimizer = dict(
     betas=(
         0.9,
@@ -874,4 +878,4 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
     ])
-work_dir = './work_dirs/dinov3l_m2f_pastis_temporal_v1'
+work_dir = './work_dirs/dinov3l_m2f_pastis_temporal_v2'

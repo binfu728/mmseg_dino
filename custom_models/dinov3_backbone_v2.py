@@ -1,8 +1,10 @@
-"""DINOv3 temporal backbone wrapper: per-frame encoding + temporal mean pooling.
+"""DINOv3 ViT backbone wrapper for mmsegmentation (V2).
 
-Input (B, T*C, H, W) is split into T frames, each frame goes through
-ViT+Adapter independently, then features are mean-pooled across time at each 
-of the 4 output scales.
+Compared to V1 (dinov3_backbone.py):
+  - Replaces 1×1 input_proj (Conv 10→3) with stem inflation:
+    directly inflates ViT patch_embed.proj and Adapter spm.stem[0]
+    from 3 channels to in_bands channels.
+  - No temporal logic (single-frame, same as V1 forward).
 """
 import sys
 from pathlib import Path
@@ -14,36 +16,30 @@ from mmcv.cnn.bricks.transformer import MultiScaleDeformableAttention
 
 from mmseg.registry import MODELS
 
-_DINO_ROOT = str(Path(__file__).parents[5] / "dino" / "dinov3")
+_DINO_ROOT = '/mnt/ht2-nas2/00-model/00-fb/mmseg_dino/dinov3'
 if _DINO_ROOT not in sys.path:
     sys.path.insert(0, _DINO_ROOT)
 
-# Sentinel-2 B04(R), B03(G), B02(B)在10波段中的索引
 _BAND_OF_RGB = [2, 1, 0]
 
 
 def _inflate_conv(conv: nn.Conv2d, in_bands: int) -> nn.Conv2d:
-    """将原本的3通道Conv膨胀至指定的in_bands通道，初始化RGB相关权重并均分剩余波段"""
     new = nn.Conv2d(
         in_bands, conv.out_channels,
         kernel_size=conv.kernel_size, stride=conv.stride,
         padding=conv.padding, bias=conv.bias is not None)
     with torch.no_grad():
-        w = conv.weight  # (out, 3, kh, kw)
-        # 将RGB权重的均值按比例复制给所有通道
+        w = conv.weight
         new.weight.copy_(w.mean(dim=1, keepdim=True).repeat(1, in_bands, 1, 1) * (3.0 / in_bands))
-        # 特别地，把原本的RGB预训练权重精准放入对应的遥感波段通道中
         for rgb_idx, band_idx in enumerate(_BAND_OF_RGB):
             new.weight[:, band_idx] = w[:, rgb_idx]
         if conv.bias is not None:
             new.bias.copy_(conv.bias)
-    new.weight.requires_grad_(True)
-    if new.bias is not None:
-        new.bias.requires_grad_(True)
     return new
 
 
 class _MmcvMSDeformAttn(nn.Module):
+
     def __init__(self, d_model=256, n_levels=4, n_heads=8, n_points=4, ratio=1.0):
         super().__init__()
         self.attn = MultiScaleDeformableAttention(
@@ -73,7 +69,29 @@ class _MmcvMSDeformAttn(nn.Module):
 
 
 @MODELS.register_module()
-class DINOv3TemporalBackbone_v2(BaseModule):
+class DINOv3BackboneMmseg_v2(BaseModule):
+    """DINOv3 ViT + DINOv3_Adapter wrapped as an mmseg backbone (V2).
+
+    V2 improvement: stem inflation instead of 1×1 input_proj.
+    When in_bands != 3, ViT.patch_embed.proj and Adapter.spm.stem[0]
+    are inflated from 3→in_bands channels with RGB weights copied.
+
+    Returns a tuple of 4 feature maps at strides [4, 8, 16, 32].
+    All outputs have `embed_dim` channels (1024 for ViT-L).
+
+    Args:
+        arch: ViT variant, e.g. 'vit_large'.
+        patch_size: ViT patch size (16).
+        checkpoint: Path to pretrained weights.
+        interaction_indexes: Which transformer block outputs to use for the
+            4 interaction stages.
+        freeze_backbone: Whether to keep ViT weights frozen.
+        in_bands: Number of input bands (3=RGB; 10=full Sentinel-2).
+            When in_bands != 3, stem layers are inflated to accept in_bands
+            channels, with pre-trained RGB weights copied through.
+        init_cfg: Ignored.
+    """
+
     _DEFAULT_INTERACTION_INDEXES = {
         "vit_small": [2, 5, 8, 11],
         "vit_base":  [2, 5, 8, 11],
@@ -88,9 +106,7 @@ class DINOv3TemporalBackbone_v2(BaseModule):
         checkpoint=None,
         interaction_indexes=None,
         freeze_backbone: bool = False,
-        in_bands: int = 10,
-        n_frames: int = 12,
-        drop_path_rate: float = 0,
+        in_bands: int = 3,
         init_cfg=None,
     ):
         super().__init__(init_cfg=None)
@@ -99,14 +115,10 @@ class DINOv3TemporalBackbone_v2(BaseModule):
         from dinov3.models import build_model_for_eval
         from dinov3.eval.segmentation.models.backbone.dinov3_adapter import DINOv3_Adapter
 
-        self.n_frames = n_frames
-        self.in_bands_per_frame = in_bands
-
         cfg = OmegaConf.create({
             "student": {
                 "arch": arch,
                 "patch_size": patch_size,
-                "drop_path_rate":drop_path_rate,
                 "pos_embed_rope_base": None,
                 "pos_embed_rope_min_period": 4,
                 "pos_embed_rope_max_period": 50,
@@ -139,7 +151,6 @@ class DINOv3TemporalBackbone_v2(BaseModule):
         self.adapter = DINOv3_Adapter(vit, interaction_indexes=interaction_indexes)
         self._replace_msda_with_mmcv()
 
-        # 修复：执行 Stem 权重通道膨胀以接受10通道遥感影像
         if in_bands != 3:
             vit_bb = self.adapter.backbone
             vit_bb.patch_embed.proj = _inflate_conv(vit_bb.patch_embed.proj, in_bands)
@@ -168,23 +179,5 @@ class DINOv3TemporalBackbone_v2(BaseModule):
                     setattr(parent, name, replacement)
 
     def forward(self, x):
-        B, TC, H, W = x.shape
-        T = self.n_frames
-        C = self.in_bands_per_frame
-        assert TC == T * C, f"Expected {T}*{C} channels, got {TC}"
-        
-        # 折叠时间维度到Batch维度
-        x = x.view(B * T, C, H, W)
-        
-        # 逐帧送入Adapter
         out = self.adapter(x)
-
-        # 聚合特征(时序平均)
-        feats = []
-        for key in ["1", "2", "3", "4"]:
-            f = out[key]
-            BT, D, h, w = f.shape
-            f = f.view(B, T, D, h, w)
-            f = f.mean(dim=1)
-            feats.append(f)
-        return tuple(feats)
+        return (out["1"], out["2"], out["3"], out["4"])
